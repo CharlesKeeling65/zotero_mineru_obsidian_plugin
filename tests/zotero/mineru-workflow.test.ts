@@ -43,4 +43,64 @@ describe("parseSelectedPdfWithMineru", () => {
       "# Selected Paper\n"
     );
   });
+
+  it("translates generated paragraph blocks and creates Zotero annotation cards when adapters are supplied", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "zotero-mineru-"));
+    const pdfPath = join(tmp, "selected-paper.pdf");
+    await writeFile(pdfPath, "%PDF-1.7", "utf8");
+    const savedAnnotations: unknown[] = [];
+
+    const result = await parseSelectedPdfWithMineru({
+      selectedItem: {
+        key: "PDF1",
+        kind: "attachment",
+        contentType: "application/pdf",
+        path: pdfPath
+      },
+      provider: {
+        backendName: "agent",
+        parsePdf: async () => ({
+          document: {
+            docId: "zotero_PDF1",
+            zoteroItemKey: "PDF1",
+            title: "Selected Paper",
+            markdown: "Article\n\n# Abstract\n\nFirst paragraph.\n\nSecond paragraph.",
+            blocks: []
+          },
+          rawFiles: []
+        })
+      },
+      title: "Selected Paper",
+      translationProvider: {
+        translateParagraph: async ({ text, previousParagraph, nextParagraph }) =>
+          `译文:${previousParagraph ?? "START"}|${text}|${nextParagraph ?? "END"}`
+      },
+      annotationWriter: {
+        createTranslationAnnotations: async (annotations) => {
+          savedAnnotations.push(...annotations);
+          return annotations.length;
+        }
+      }
+    });
+
+    expect(result.normalized.blocks.map((block) => block.content.text)).toEqual([
+      "First paragraph.",
+      "Second paragraph."
+    ]);
+    expect(result.translationAnnotations?.createdCount).toBe(2);
+    expect(savedAnnotations).toMatchObject([
+      {
+        type: "highlight",
+        text: "First paragraph.",
+        comment: "译文:START|First paragraph.|Second paragraph.",
+        color: "#aaaaaa"
+      },
+      {
+        type: "highlight",
+        text: "Second paragraph.",
+        comment: "译文:First paragraph.|Second paragraph.|END",
+        color: "#aaaaaa"
+      }
+    ]);
+  });
 });

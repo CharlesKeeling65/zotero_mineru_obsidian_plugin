@@ -5,16 +5,29 @@ import type { MineruProvider } from "../mineru/client.js";
 import type { NormalizedDocument } from "../normalize/normalizer.js";
 import { ParseService } from "../parse/parse-service.js";
 import type { ParseCache } from "../parse/parse-cache.js";
+import type { TranslationProvider } from "../translate/provider.js";
+import { translateDocumentTextBlocks } from "../translate/contextual-translator.js";
+import {
+  buildTranslationAnnotationPayloads,
+  type TranslationAnnotationWriter,
+  type ZoteroTranslationAnnotationPayload
+} from "./annotations.js";
 import { resolvePdfSelection, type ResolvePdfSelectionInput } from "./selection.js";
 
 export interface ParseSelectedPdfWithMineruInput extends ResolvePdfSelectionInput {
   provider: MineruProvider;
   title: string;
+  translationProvider?: TranslationProvider;
+  annotationWriter?: TranslationAnnotationWriter;
 }
 
 export interface ParseSelectedPdfWithMineruOutput {
   normalized: NormalizedDocument;
   outputDir: string;
+  translationAnnotations?: {
+    annotations: ZoteroTranslationAnnotationPayload[];
+    createdCount: number;
+  };
 }
 
 class PdfSiblingParseCache implements ParseCache {
@@ -64,6 +77,26 @@ export async function parseSelectedPdfWithMineru(
     pdfPath,
     title: input.title
   });
+
+  if (input.translationProvider && input.annotationWriter) {
+    const translations = await translateDocumentTextBlocks(
+      normalized,
+      input.translationProvider
+    );
+    const annotations = buildTranslationAnnotationPayloads(translations);
+    const createdCount = await input.annotationWriter.createTranslationAnnotations(
+      annotations
+    );
+
+    return {
+      normalized,
+      outputDir,
+      translationAnnotations: {
+        annotations,
+        createdCount
+      }
+    };
+  }
 
   return { normalized, outputDir };
 }

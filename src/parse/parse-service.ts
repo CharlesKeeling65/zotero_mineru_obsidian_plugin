@@ -2,6 +2,7 @@ import type { NormalizedDocument } from "../normalize/normalizer.js";
 import { normalizeMineruDocument } from "../normalize/normalizer.js";
 import type { MineruProvider, ParsePdfInput } from "../mineru/client.js";
 import type { ParseCache } from "./parse-cache.js";
+import { ensureMarkdownTextBlocks } from "./markdown-preprocessor.js";
 
 export interface ParseServiceDependencies {
   provider: MineruProvider;
@@ -19,7 +20,7 @@ export class ParseService {
     }
 
     return normalizeMineruDocument(
-      response.document,
+      ensureMarkdownTextBlocks(response.document),
       this.dependencies.provider.backendName
     );
   }
