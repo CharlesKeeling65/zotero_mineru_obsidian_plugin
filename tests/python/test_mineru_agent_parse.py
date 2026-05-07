@@ -1,8 +1,14 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from scripts.mineru_agent_parse import MineruAgentClient, parse_pdf_to_sibling_markdown
+from scripts.mineru_agent_parse import (
+    MineruAgentClient,
+    UrllibResponse,
+    UrllibTransport,
+    parse_pdf_to_sibling_markdown,
+)
 
 
 class FakeResponse:
@@ -68,6 +74,35 @@ class MineruAgentParseTest(unittest.TestCase):
                 [call[0] for call in http.calls],
                 ["POST", "PUT", "GET_JSON", "GET_TEXT"],
             )
+
+    def test_urllib_upload_uses_empty_content_type_for_signed_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "paper.pdf"
+            pdf_path.write_bytes(b"%PDF-1.7")
+            captured = {}
+
+            def fake_open(request):
+                captured["content_type"] = request.get_header("Content-type")
+
+                class FakeContext:
+                    status = 200
+
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, exc_type, exc, tb):
+                        return False
+
+                    def read(self):
+                        return b""
+
+                return FakeContext()
+
+            with patch("urllib.request.urlopen", fake_open):
+                response = UrllibTransport().put_file("https://upload.example/paper.pdf", pdf_path)
+
+            self.assertEqual(response, UrllibResponse(status_code=200, text=""))
+            self.assertEqual(captured["content_type"], "")
 
 
 if __name__ == "__main__":

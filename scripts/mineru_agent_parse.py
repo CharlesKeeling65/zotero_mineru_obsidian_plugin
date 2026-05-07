@@ -56,6 +56,7 @@ class UrllibTransport:
             url,
             data=file_path.read_bytes(),
             method="PUT",
+            headers={"Content-Type": ""},
         )
         return self._open(request)
 
