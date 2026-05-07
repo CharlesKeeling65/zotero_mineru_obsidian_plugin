@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
+    "inspect:markdown-blocks": "node scripts/inspect_markdown_blocks.mjs",
     "test": "node ./node_modules/vitest/vitest.mjs run"
   },
   "devDependencies": {
