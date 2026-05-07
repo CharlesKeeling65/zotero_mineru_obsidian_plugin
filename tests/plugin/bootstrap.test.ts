@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { bootstrapPlugin } from "../../src/main.js";
+import {
+  bootstrapPlugin,
+  MineruAgentProvider,
+  parseSelectedPdfWithMineru
+} from "../../src/main.js";
 import { PLUGIN_MANIFEST } from "../../src/plugin/manifest.js";
 
 describe("bootstrapPlugin", () => {
@@ -11,5 +15,10 @@ describe("bootstrapPlugin", () => {
     expect(bootstrapped.manifest.zoteroCompatibility.minimum).toBe(8);
     expect(bootstrapped.manifest.zoteroCompatibility.tested).toEqual([8, 9]);
     expect(bootstrapped.tabs).toEqual(["outline", "cards", "visuals", "export"]);
+  });
+
+  it("exposes the current MinerU parse workflow from the plugin entry", () => {
+    expect(MineruAgentProvider).toBeDefined();
+    expect(parseSelectedPdfWithMineru).toBeDefined();
   });
 });
