@@ -15,15 +15,16 @@
 - 归一化内部模型：`Document`、`Block`、`Asset`、`Relation`、`AIAnnotation`。
 - 基于稳定输入的 deterministic block ID，同时保留显式 `order` 字段。
 - 上下文段落翻译接口：翻译请求包含全文、章节路径、前一段和后一段。
-- Zotero 灰色翻译注释 payload 构建：高亮引用部分是原段落，注释 comment 是译文。
+- Zotero Reader text-location 匹配核心：可以把段落文本匹配到页面 text runs，并生成 `position.rects`。
+- Zotero 灰色翻译注释 payload 构建：高亮引用部分是原段落，注释 comment 是译文；如果已经解析到 reader rects，则会写入 annotation position。
 - 插件 manifest/bootstrap 模块，以及轻量 logger/error primitives。
 - 单元测试覆盖 parse、normalize、bootstrap、errors、markdown 拆分、上下文翻译、Zotero annotation payload 和 MinerU workflow 集成。
 
 尚未实现：
 
 - 可打包的 Zotero UI/menu command，尚不能直接从 Zotero Reader 内完整触发工作流。
-- Zotero Reader text-location lookup，也就是从 PDF 文本层定位段落并计算矩形坐标。
-- 真正页面锚定的 PDF 高亮。当前 annotation payload 的 `position.rects` 有意保持为空，因为 MinerU 快速 Agent Markdown 不提供 layout 坐标。
+- 从 live Zotero Reader instance 中提取每页 text runs 的 runtime 宿主绑定。
+- 在真实 Zotero 窗口内创建页面锚定 highlight。当前 payload 已可携带 rects，但 live runtime creation 还需要宿主层接入。
 - 真实翻译 API provider。当前翻译层是接口和 workflow 接入点。
 - 完整 vault export。当前主要是 raw Markdown/JSON 基线。
 - API key、vault 路径、翻译 provider 和 workflow 选项的设置页 UI。
@@ -38,6 +39,8 @@
   -> 有序 paragraph RawMineruBlock[]
   -> 归一化 Document/Block 模型
   -> 上下文段落翻译 provider
+  -> Zotero Reader text-location provider
+  -> 段落 PDF rects
   -> 灰色 Zotero 翻译注释 payload
   -> 后续 Zotero.Annotations.saveFromJSON runtime 写入
 ```
@@ -54,8 +57,9 @@
 | 归一化 | `src/normalize/normalizer.ts` | 将 MinerU 形态数据转换为内部 schema，生成 deterministic block IDs 和 section tree。 |
 | 翻译接口 | `src/translate/provider.ts` | 定义 `translateParagraph(request)`。 |
 | 翻译编排 | `src/translate/contextual-translator.ts` | 对每个 text block 携带全文和相邻段落上下文调用翻译 provider。 |
+| Zotero text locations | `src/zotero/text-location.ts` | 将原文段落匹配到 Zotero Reader 页面 text runs，并返回页面矩形坐标。 |
 | Zotero 注释 | `src/zotero/annotations.ts` | 构建灰色 highlight annotation payload，并封装 `Zotero.Annotations.saveFromJSON` 写入适配器。 |
-| Zotero workflow | `src/zotero/mineru-workflow.ts` | 解析选中 PDF、运行 MinerU、写同级文件，可选执行翻译并创建注释。 |
+| Zotero workflow | `src/zotero/mineru-workflow.ts` | 解析选中 PDF、运行 MinerU、写同级文件，可选执行翻译、解析 text locations 并创建注释。 |
 | Markdown 检查脚本 | `scripts/inspect_markdown_blocks.mjs` | `npm run build` 后打印真实 Markdown 的段落拆分结果。 |
 | 公共导出 | `src/main.ts` | 导出 plugin、MinerU、预处理、翻译和 annotation API。 |
 
@@ -123,10 +127,12 @@ npm test -- tests/parse/markdown-preprocessor.test.ts
 当前对这个真实 Markdown 的断言：
 
 - 该 Markdown 会拆成 `102` 个有序 text blocks。
-- 第 `1` 个 block 位于论文标题 section，并包含 received date。
-- 第 `6` 个 block 包含摘要开头段落。
-- 第 `14` 个 block 位于 `Divergent estimates in evaluating manure recycling` section。
-- 最后一个 block 位于 `Code availability` section。
+- 第 `1` 个 block 是 `coreSection: "frontmatter"`，位于论文标题 section，并包含 received date。
+- 第 `6` 个 block 是 `coreSection: "abstract"`，包含推断出的摘要开头段落。
+- 第 `7` 个 block 开始进入推断出的 `coreSection: "introduction"`，因为这类 Nature Markdown 没有显式 Introduction heading。
+- 第 `14` 个 block 是 `coreSection: "results"`，位于 `Divergent estimates in evaluating manure recycling` section。
+- 至少存在一个 `coreSection: "discussion"` block，且至少存在一个 `coreSection: "methods"` block。
+- 最后一个 block 是 `coreSection: "availability"`，位于 `Code availability` section。
 - 不会生成 `References` section 下的 block。
 
 如果你不想只看测试 pass/fail，而是要直接审阅拆分结果，先 build，然后运行：
@@ -179,7 +185,8 @@ interface ZoteroTranslationAnnotationPayload {
 - `comment` 是译文，对应 Zotero 注释卡片下方的注释内容。
 - `color` 统一为灰色：`#aaaaaa`。
 - `tags` 包含 `mineru-translation`。
-- `position.rects` 当前为空。后续必须通过 Zotero Reader text-location lookup 填充，而不是依赖 MinerU 快速 Agent Markdown。
+- 当 `textLocationProvider` 能够把原文段落匹配到 Zotero Reader 页面 text runs 时，`position.rects` 会被填充。
+- 只有未提供 text-location provider 或没有匹配结果时，`position.rects` 才保持为空。
 
 Zotero 参考背景：
 
@@ -246,12 +253,12 @@ docs/plans/
 
 本仓库以 Zotero 8 为最低目标，并保持 Zotero 9 前向兼容。新增代码应避免 Zotero 7-only 假设，除非该逻辑被隔离在 adapter 内。
 
-对于 annotation anchoring，下一步技术重点是 Zotero Reader text-location lookup：在 PDF 文本层中定位每个原文段落，计算 page rectangles，然后在调用 `Zotero.Annotations.saveFromJSON` 前填充 `position.rects`。
+对于 annotation anchoring，下一步技术重点是 Zotero runtime 宿主绑定：从 live Reader instance 提取页面 text runs 和 rectangles，传入 `ZoteroReaderTextLocationProvider`，再用生成的 payload 调用 `Zotero.Annotations.saveFromJSON`。
 
 ## 路线图
 
 1. 增加真实 Zotero runtime command/menu entry，让用户能从选中的 PDF attachment 触发 MinerU workflow。
-2. 实现 Zotero Reader text-location matching，把 paragraph 映射到 PDF rectangles。
+2. 将 text-location provider 绑定到 live Zotero Reader runtime，让页面 text runs 和 rectangles 来自当前 PDF。
 3. 增加真实翻译 provider 实现，以及凭据和模型选择设置。
 4. 将 normalized documents 和 translation annotation metadata 持久化到 PDF 同级目录或配置的 vault。
 5. 扩展 vault export，支持 `paper.md`、`full.md`、`document.json`、`metadata.json`、per-block files、assets 和 AI outputs。

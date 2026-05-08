@@ -15,6 +15,7 @@ const markdown = await readFile(markdownPath, "utf8");
 const blocks = markdownToTextBlocks(markdown);
 const preview = blocks.slice(0, previewCount).map((block) => ({
   order: block.order,
+  coreSection: block.coreSection,
   section: block.section,
   text: block.text
 }));
@@ -28,6 +29,7 @@ console.log(
       firstBlocks: preview,
       lastBlocks: blocks.slice(-3).map((block) => ({
         order: block.order,
+        coreSection: block.coreSection,
         section: block.section,
         text: block.text
       }))

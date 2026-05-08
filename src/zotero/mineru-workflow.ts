@@ -7,6 +7,8 @@ import { ParseService } from "../parse/parse-service.js";
 import type { ParseCache } from "../parse/parse-cache.js";
 import type { TranslationProvider } from "../translate/provider.js";
 import { translateDocumentTextBlocks } from "../translate/contextual-translator.js";
+import type { ZoteroReaderTextLocationProvider } from "./text-location.js";
+import { resolveTextLocationsForTranslations } from "./text-location.js";
 import {
   buildTranslationAnnotationPayloads,
   type TranslationAnnotationWriter,
@@ -18,6 +20,7 @@ export interface ParseSelectedPdfWithMineruInput extends ResolvePdfSelectionInpu
   provider: MineruProvider;
   title: string;
   translationProvider?: TranslationProvider;
+  textLocationProvider?: ZoteroReaderTextLocationProvider;
   annotationWriter?: TranslationAnnotationWriter;
 }
 
@@ -83,7 +86,15 @@ export async function parseSelectedPdfWithMineru(
       normalized,
       input.translationProvider
     );
-    const annotations = buildTranslationAnnotationPayloads(translations);
+    const textLocations = input.textLocationProvider
+      ? await resolveTextLocationsForTranslations(
+          translations,
+          input.textLocationProvider
+        )
+      : undefined;
+    const annotations = buildTranslationAnnotationPayloads(translations, {
+      textLocations
+    });
     const createdCount = await input.annotationWriter.createTranslationAnnotations(
       annotations
     );

@@ -112,6 +112,7 @@ export function normalizeMineruDocument(
     blockId: makeStableBlockId(raw.docId, block),
     documentId: raw.docId,
     type: block.type,
+    coreSection: block.coreSection ?? "other",
     subtype: null,
     sectionPath: [block.section, block.subsection].filter(
       (value): value is string => Boolean(value)

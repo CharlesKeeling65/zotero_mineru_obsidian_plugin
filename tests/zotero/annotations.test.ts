@@ -37,6 +37,42 @@ describe("buildTranslationAnnotationPayloads", () => {
     });
     expect(annotation?.key).toMatch(/^[A-Z0-9]{8}$/);
   });
+
+  it("uses resolved Zotero Reader text-location rects when available", () => {
+    const [annotation] = buildTranslationAnnotationPayloads(
+      [
+        {
+          blockId: "block-1",
+          order: 1,
+          pageRange: { start: 1, end: 1 },
+          sectionPath: ["Abstract"],
+          sourceText: "Original paragraph.",
+          translation: "精准译文。"
+        }
+      ],
+      {
+        textLocations: new Map([
+          [
+            "block-1",
+            {
+              pageIndex: 4,
+              pageLabel: "5",
+              rects: [[11, 22, 33, 44]]
+            }
+          ]
+        ])
+      }
+    );
+
+    expect(annotation).toMatchObject({
+      pageLabel: "5",
+      sortIndex: "00004|000001|00000",
+      position: {
+        pageIndex: 4,
+        rects: [[11, 22, 33, 44]]
+      }
+    });
+  });
 });
 
 describe("RuntimeZoteroAnnotationWriter", () => {

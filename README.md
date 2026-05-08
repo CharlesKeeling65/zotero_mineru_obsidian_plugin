@@ -15,15 +15,16 @@ Implemented:
 - Normalization into typed internal entities: `Document`, `Block`, `Asset`, `Relation`, and `AIAnnotation`.
 - Deterministic block IDs based on stable document/block inputs while preserving explicit `order`.
 - Contextual paragraph translation interface that receives the full document, section path, previous paragraph, and next paragraph.
-- Zotero annotation payload builder for gray translation cards: the highlighted quote is the source paragraph and the annotation comment is the translation.
+- Zotero Reader text-location matching core: paragraph text can be matched against page text runs to produce `position.rects`.
+- Zotero annotation payload builder for gray translation cards: the highlighted quote is the source paragraph, the annotation comment is the translation, and resolved reader rects are used when available.
 - Plugin manifest/bootstrap modules and lightweight logger/error primitives.
 - Unit tests for parsing, normalization, bootstrap, errors, markdown splitting, contextual translation, Zotero annotation payloads, and the integrated MinerU workflow.
 
 Not implemented yet:
 
 - Packaged Zotero UI/menu command for invoking the full workflow from the Zotero reader.
-- Real Zotero Reader text-location lookup for paragraph-to-PDF rectangle mapping.
-- True page-anchored highlights. Current annotation payloads intentionally contain empty `position.rects` because MinerU fast Agent Markdown does not provide layout coordinates.
+- Runtime extraction of page text runs from the live Zotero Reader instance.
+- True live Zotero page-anchored highlight creation inside a running Zotero window. Payloads can now carry rects, but live runtime creation still needs host binding.
 - Real translation API provider. The current translation layer is an interface and workflow integration point.
 - Vault export beyond the current raw Markdown/JSON baseline.
 - Settings UI for API keys, vault paths, translation providers, and workflow options.
@@ -38,6 +39,8 @@ Selected Zotero PDF
   -> ordered paragraph RawMineruBlock[]
   -> normalized Document/Block model
   -> contextual paragraph translation provider
+  -> Zotero Reader text-location provider
+  -> paragraph PDF rects
   -> gray Zotero translation annotation payloads
   -> future Zotero.Annotations.saveFromJSON runtime write
 ```
@@ -54,8 +57,9 @@ Selected Zotero PDF
 | Normalization | `src/normalize/normalizer.ts` | Converts raw MinerU-shaped data into internal schema with deterministic block IDs and section tree. |
 | Translation interface | `src/translate/provider.ts` | Defines `translateParagraph(request)`. |
 | Translation orchestration | `src/translate/contextual-translator.ts` | Sends each text block to the translation provider with full-document and neighbor context. |
+| Zotero text locations | `src/zotero/text-location.ts` | Matches source paragraphs to Zotero Reader page text runs and returns page rectangles. |
 | Zotero annotations | `src/zotero/annotations.ts` | Builds gray highlight annotation payloads and wraps `Zotero.Annotations.saveFromJSON`. |
-| Zotero workflow | `src/zotero/mineru-workflow.ts` | Resolves selected PDF, runs parsing, writes sibling files, optionally translates and creates annotations. |
+| Zotero workflow | `src/zotero/mineru-workflow.ts` | Resolves selected PDF, runs parsing, writes sibling files, optionally translates, resolves text locations, and creates annotations. |
 | Markdown inspection | `scripts/inspect_markdown_blocks.mjs` | Prints real Markdown split results after `npm run build`. |
 | Public exports | `src/main.ts` | Re-exports plugin, MinerU, preprocessing, translation, and annotation APIs. |
 
@@ -123,10 +127,12 @@ npm test -- tests/parse/markdown-preprocessor.test.ts
 Current assertions for that real Markdown:
 
 - The Markdown splits into `102` ordered text blocks.
-- Block `1` is under the paper-title section and contains the received date.
-- Block `6` contains the abstract opening paragraph.
-- Block `14` is under the `Divergent estimates in evaluating manure recycling` section.
-- The final block is under `Code availability`.
+- Block `1` is `coreSection: "frontmatter"` under the paper-title section and contains the received date.
+- Block `6` is `coreSection: "abstract"` and contains the inferred abstract opening paragraph.
+- Block `7` begins the inferred `coreSection: "introduction"` because this Nature-style Markdown has no explicit Introduction heading.
+- Block `14` is `coreSection: "results"` under the `Divergent estimates in evaluating manure recycling` section.
+- At least one block is classified as `coreSection: "discussion"` and at least one block is classified as `coreSection: "methods"`.
+- The final block is `coreSection: "availability"` under `Code availability`.
 - No generated block is assigned to the `References` section.
 
 To inspect the actual split output instead of only seeing a test pass/fail result, build once and run:
@@ -179,7 +185,8 @@ Current behavior:
 - `comment` is the translated paragraph shown in the Zotero annotation card.
 - `color` is gray: `#aaaaaa`.
 - `tags` includes `mineru-translation`.
-- `position.rects` is currently empty. This must be filled later from Zotero Reader text-location lookup, not from MinerU fast Agent Markdown.
+- `position.rects` is populated when `textLocationProvider` resolves the source paragraph against Zotero Reader page text runs.
+- `position.rects` remains empty only when no text-location provider is supplied or no match is found.
 
 Zotero reference context:
 
@@ -246,12 +253,12 @@ docs/plans/
 
 This repository targets Zotero 8 as the minimum baseline and keeps Zotero 9 forward compatibility in mind. New code should avoid Zotero 7-only assumptions unless isolated behind an adapter.
 
-For annotation anchoring, the next technical step is Zotero Reader text-location lookup: locate each source paragraph in the PDF text layer, derive page rectangles, and populate `position.rects` before calling `Zotero.Annotations.saveFromJSON`.
+For annotation anchoring, the next technical step is the Zotero runtime host binding: extract page text runs and rectangles from the live Reader instance, pass them into `ZoteroReaderTextLocationProvider`, and call `Zotero.Annotations.saveFromJSON` with the generated payloads.
 
 ## Roadmap
 
 1. Add a real Zotero runtime command/menu entry that starts the MinerU workflow from a selected PDF attachment.
-2. Implement Zotero Reader text-location matching for paragraph-to-rectangle anchoring.
+2. Bind the text-location provider to the live Zotero Reader runtime so page text runs and rectangles come from the active PDF.
 3. Add a real translation provider implementation and settings for credentials/model selection.
 4. Persist normalized documents and translation annotation metadata beside the source PDF or in the configured vault.
 5. Expand vault export to `paper.md`, `full.md`, `document.json`, `metadata.json`, per-block files, assets, and AI outputs.

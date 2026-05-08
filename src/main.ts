@@ -18,3 +18,11 @@ export {
   type TranslationAnnotationWriter,
   type ZoteroTranslationAnnotationPayload
 } from "./zotero/annotations.js";
+export {
+  findTextLocationForParagraph,
+  resolveTextLocationsForTranslations,
+  type ZoteroReaderPageText,
+  type ZoteroReaderTextLocationProvider,
+  type ZoteroReaderTextRun,
+  type ZoteroTextLocation
+} from "./zotero/text-location.js";

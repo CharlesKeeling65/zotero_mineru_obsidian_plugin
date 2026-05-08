@@ -1,3 +1,5 @@
+import type { CoreSection } from "./core-section.js";
+
 export type BlockType = "text" | "figure" | "table" | "formula";
 
 export interface BlockPageRange {
@@ -14,6 +16,7 @@ export interface Block {
   blockId: string;
   documentId: string;
   type: BlockType;
+  coreSection: CoreSection;
   subtype: string | null;
   sectionPath: string[];
   pageRange: BlockPageRange;

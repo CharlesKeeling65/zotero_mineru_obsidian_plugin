@@ -1,7 +1,19 @@
+import type { CoreSection } from "../model/index.js";
 import type { RawMineruBlock, RawMineruDocument } from "../types/mineru.js";
 
 const ARTICLE_MARKER = /^article$/i;
 const STOP_HEADING = /^(references|bibliography|works cited|acknowledg(?:e)?ments|author contributions|competing interests|supplementary)/i;
+const RESULTS_DISCUSSION_HEADING = /results?\s+(and|&)\s+discussion/i;
+const AVAILABILITY_HEADING = /^(reporting summary|data availability|code availability)$/i;
+
+interface Heading {
+  level: number;
+  text: string;
+}
+
+export interface MarkdownToTextBlocksOptions {
+  title?: string;
+}
 
 function stripMarkdownInline(value: string): string {
   return value
@@ -14,6 +26,18 @@ function stripMarkdownInline(value: string): string {
 
 function isHeading(line: string): boolean {
   return /^#{1,6}\s+\S/.test(line.trim());
+}
+
+function parseHeading(line: string): Heading | null {
+  const match = /^(#{1,6})\s+(.+)$/.exec(line.trim());
+  if (!match) {
+    return null;
+  }
+
+  return {
+    level: match[1]?.length ?? 1,
+    text: stripMarkdownInline(match[2] ?? "")
+  };
 }
 
 function headingText(line: string): string {
@@ -49,10 +73,67 @@ function articleLines(markdown: string): string[] {
   return stopIndex >= 0 ? selected.slice(0, stopIndex) : selected;
 }
 
-export function markdownToTextBlocks(markdown: string): RawMineruBlock[] {
+function classifyHeading(text: string): CoreSection | null {
+  const normalized = text.trim().toLowerCase();
+
+  if (normalized === "abstract") {
+    return "abstract";
+  }
+  if (normalized === "introduction") {
+    return "introduction";
+  }
+  if (RESULTS_DISCUSSION_HEADING.test(normalized)) {
+    return "results_discussion";
+  }
+  if (normalized === "results") {
+    return "results";
+  }
+  if (normalized === "discussion") {
+    return "discussion";
+  }
+  if (normalized.startsWith("methods")) {
+    return "methods";
+  }
+  if (AVAILABILITY_HEADING.test(normalized)) {
+    return "availability";
+  }
+
+  return null;
+}
+
+function isMetadataParagraph(text: string): boolean {
+  return (
+    /^(received|accepted|published online):/i.test(text) ||
+    /^check for updates$/i.test(text) ||
+    /\b\d+(,\d+)*\b/.test(text) && text.length < 180 && /[,&]/.test(text)
+  );
+}
+
+function inferTitleSectionRole(
+  text: string,
+  titleSectionParagraphCount: number
+): CoreSection {
+  if (isMetadataParagraph(text)) {
+    return "frontmatter";
+  }
+
+  if (titleSectionParagraphCount === 0) {
+    return "abstract";
+  }
+
+  return "introduction";
+}
+
+export function markdownToTextBlocks(
+  markdown: string,
+  options: MarkdownToTextBlocksOptions = {}
+): RawMineruBlock[] {
   const blocks: RawMineruBlock[] = [];
   const paragraphLines: string[] = [];
-  let currentSection = "Article";
+  let currentSection = options.title ?? "Article";
+  let currentCoreSection: CoreSection = "other";
+  let titleSection: string | null = options.title ?? null;
+  let titleSectionContentBlocks = 0;
 
   const flush = (): void => {
     const text = makeParagraph(paragraphLines);
@@ -62,15 +143,25 @@ export function markdownToTextBlocks(markdown: string): RawMineruBlock[] {
       return;
     }
 
+    const coreSection =
+      titleSection && currentSection === titleSection
+        ? inferTitleSectionRole(text, titleSectionContentBlocks)
+        : currentCoreSection;
+
     blocks.push({
       type: "text",
       section: currentSection,
+      coreSection,
       pageStart: 1,
       pageEnd: 1,
       order: blocks.length + 1,
       text,
       markdown: text
     });
+
+    if (titleSection && currentSection === titleSection && coreSection !== "frontmatter") {
+      titleSectionContentBlocks += 1;
+    }
   };
 
   for (const line of articleLines(markdown)) {
@@ -81,9 +172,16 @@ export function markdownToTextBlocks(markdown: string): RawMineruBlock[] {
       continue;
     }
 
-    if (isHeading(trimmed)) {
+    const heading = parseHeading(trimmed);
+    if (heading) {
       flush();
-      currentSection = headingText(trimmed) || currentSection;
+      currentSection = heading.text || currentSection;
+
+      if (heading.level === 1 && blocks.length === 0) {
+        titleSection = currentSection || options.title || null;
+      }
+
+      currentCoreSection = classifyHeading(currentSection) ?? currentCoreSection;
       continue;
     }
 
@@ -101,6 +199,6 @@ export function ensureMarkdownTextBlocks(raw: RawMineruDocument): RawMineruDocum
 
   return {
     ...raw,
-    blocks: markdownToTextBlocks(raw.markdown)
+    blocks: markdownToTextBlocks(raw.markdown, { title: raw.title })
   };
 }

@@ -1,6 +1,9 @@
+import type { CoreSection } from "../model/index.js";
+
 export interface RawMineruBlock {
   type: "text" | "figure" | "table" | "formula";
   section: string;
+  coreSection?: CoreSection;
   subsection?: string;
   pageStart: number;
   pageEnd: number;

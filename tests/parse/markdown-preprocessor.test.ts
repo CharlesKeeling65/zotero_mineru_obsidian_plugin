@@ -29,6 +29,7 @@ describe("ensureMarkdownTextBlocks", () => {
     expect(result.blocks).toHaveLength(102);
     expect(result.blocks[0]).toMatchObject({
       type: "text",
+      coreSection: "frontmatter",
       section:
         "A framework for estimating manure nitrogen balance and recycling potential for current and future conditions in the USA",
       pageStart: 1,
@@ -39,13 +40,24 @@ describe("ensureMarkdownTextBlocks", () => {
     expect(result.blocks[5]?.text).toContain(
       "Manure recycling can ameliorate pollution and fertilizer demand"
     );
+    expect(result.blocks[5]?.coreSection).toBe("abstract");
+    expect(result.blocks[6]).toMatchObject({
+      order: 7,
+      coreSection: "introduction"
+    });
     expect(result.blocks[13]).toMatchObject({
       type: "text",
+      coreSection: "results",
       section: "Divergent estimates in evaluating manure recycling",
       order: 14
     });
+    expect(
+      result.blocks.find((block) => block.section === "Discussion")?.coreSection
+    ).toBe("discussion");
+    expect(result.blocks.some((block) => block.coreSection === "methods")).toBe(true);
     expect(result.blocks.at(-1)).toMatchObject({
       type: "text",
+      coreSection: "availability",
       section: "Code availability",
       order: 102,
       text:

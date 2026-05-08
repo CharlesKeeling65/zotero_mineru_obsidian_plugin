@@ -75,6 +75,18 @@ describe("parseSelectedPdfWithMineru", () => {
         translateParagraph: async ({ text, previousParagraph, nextParagraph }) =>
           `译文:${previousParagraph ?? "START"}|${text}|${nextParagraph ?? "END"}`
       },
+      textLocationProvider: {
+        getPages: async () => [
+          {
+            pageIndex: 0,
+            pageLabel: "1",
+            textRuns: [
+              { text: "First paragraph.", rect: [1, 2, 3, 4] },
+              { text: "Second paragraph.", rect: [5, 6, 7, 8] }
+            ]
+          }
+        ]
+      },
       annotationWriter: {
         createTranslationAnnotations: async (annotations) => {
           savedAnnotations.push(...annotations);
@@ -93,13 +105,21 @@ describe("parseSelectedPdfWithMineru", () => {
         type: "highlight",
         text: "First paragraph.",
         comment: "译文:START|First paragraph.|Second paragraph.",
-        color: "#aaaaaa"
+        color: "#aaaaaa",
+        position: {
+          pageIndex: 0,
+          rects: [[1, 2, 3, 4]]
+        }
       },
       {
         type: "highlight",
         text: "Second paragraph.",
         comment: "译文:First paragraph.|Second paragraph.|END",
-        color: "#aaaaaa"
+        color: "#aaaaaa",
+        position: {
+          pageIndex: 0,
+          rects: [[5, 6, 7, 8]]
+        }
       }
     ]);
   });

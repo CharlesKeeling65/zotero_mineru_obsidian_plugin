@@ -1,4 +1,5 @@
 import type { TranslatedTextBlock } from "../translate/contextual-translator.js";
+import type { ZoteroTextLocation } from "./text-location.js";
 
 export const GRAY_TRANSLATION_ANNOTATION_COLOR = "#aaaaaa";
 const TRANSLATION_TAG = "mineru-translation";
@@ -45,6 +46,10 @@ export interface TranslationAnnotationWriter {
   ): Promise<number>;
 }
 
+export interface BuildTranslationAnnotationPayloadOptions {
+  textLocations?: Map<string, ZoteroTextLocation>;
+}
+
 function hashString(value: string): number {
   let hash = 2166136261;
 
@@ -70,10 +75,13 @@ function makeSortIndex(translation: TranslatedTextBlock): string {
 }
 
 export function buildTranslationAnnotationPayloads(
-  translations: TranslatedTextBlock[]
+  translations: TranslatedTextBlock[],
+  options: BuildTranslationAnnotationPayloadOptions = {}
 ): ZoteroTranslationAnnotationPayload[] {
   return translations.map((translation) => {
-    const pageIndex = Math.max(0, translation.pageRange.start - 1);
+    const textLocation = options.textLocations?.get(translation.blockId);
+    const pageIndex = textLocation?.pageIndex ?? Math.max(0, translation.pageRange.start - 1);
+    const pageLabel = textLocation?.pageLabel ?? String(translation.pageRange.start);
 
     return {
       key: makeZoteroKey(`${translation.blockId}:${translation.sourceText}`),
@@ -81,11 +89,13 @@ export function buildTranslationAnnotationPayloads(
       text: translation.sourceText,
       comment: translation.translation,
       color: GRAY_TRANSLATION_ANNOTATION_COLOR,
-      pageLabel: String(translation.pageRange.start),
-      sortIndex: makeSortIndex(translation),
+      pageLabel,
+      sortIndex: textLocation
+        ? `${padSortPart(pageIndex)}|${translation.order.toString().padStart(6, "0")}|00000`
+        : makeSortIndex(translation),
       position: {
         pageIndex,
-        rects: []
+        rects: textLocation?.rects ?? []
       },
       tags: [{ name: TRANSLATION_TAG }]
     };

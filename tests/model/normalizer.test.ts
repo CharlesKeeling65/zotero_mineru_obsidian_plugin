@@ -14,6 +14,7 @@ describe("normalizeMineruDocument", () => {
         {
           type: "text",
           section: "Abstract",
+          coreSection: "abstract",
           pageStart: 1,
           pageEnd: 1,
           order: 1,
@@ -44,5 +45,6 @@ describe("normalizeMineruDocument", () => {
     expect(result.blocks[0]?.blockId).toBe(secondPass.blocks[0]?.blockId);
     expect(result.blocks[1]?.sectionPath).toEqual(["Methods", "Approach"]);
     expect(result.blocks[1]?.type).toBe("text");
+    expect(result.blocks[0]?.coreSection).toBe("abstract");
   });
 });
