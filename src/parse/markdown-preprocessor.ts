@@ -6,15 +6,39 @@ const STOP_HEADING = /^(references|bibliography|works cited|acknowledg(?:e)?ment
 const RESULTS_DISCUSSION_HEADING = /results?\s+(and|&)\s+discussion/i;
 const AVAILABILITY_HEADING = /^(reporting summary|data availability|code availability)$/i;
 
+/**
+ * Parsed Markdown heading.
+ *
+ * 中文：`level` 来自 `#` 数量，`text` 是去掉 Markdown 语法后的标题文字。
+ * English: `level` comes from the number of `#`; `text` is cleaned heading text.
+ */
 interface Heading {
   level: number;
   text: string;
 }
 
+/**
+ * Options for Markdown fallback splitting.
+ *
+ * 中文：`title` 通常来自 Zotero item metadata 或解析任务输入。
+ * 当论文没有显式 Abstract/Introduction 标题时，标题可以帮助识别标题区段。
+ *
+ * English: `title` usually comes from Zotero metadata or parse input.
+ * It helps identify the title section when Abstract/Introduction headings are absent.
+ */
 export interface MarkdownToTextBlocksOptions {
   title?: string;
 }
 
+/**
+ * Remove lightweight Markdown syntax while keeping readable text.
+ *
+ * 中文：这里不是完整 Markdown parser，只做“足够稳定”的文本清理：
+ * 图片去掉，链接保留显示文字，粗体/斜体/代码符号移除，连续空白压缩。
+ *
+ * English: this is not a full Markdown parser. It performs enough cleanup for
+ * paragraph identity and reader text matching.
+ */
 function stripMarkdownInline(value: string): string {
   return value
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
@@ -28,6 +52,12 @@ function isHeading(line: string): boolean {
   return /^#{1,6}\s+\S/.test(line.trim());
 }
 
+/**
+ * Parse a Markdown heading line.
+ *
+ * 中文知识点：正则 `^(#{1,6})\s+(.+)$` 匹配 ATX heading，例如 `## Methods`。
+ * English concept: this regex matches ATX headings such as `## Methods`.
+ */
 function parseHeading(line: string): Heading | null {
   const match = /^(#{1,6})\s+(.+)$/.exec(line.trim());
   if (!match) {
@@ -45,9 +75,17 @@ function headingText(line: string): string {
 }
 
 function isTableParagraph(lines: string[]): boolean {
+  // 中文：Markdown 表格通常每行以 `|` 包住。表格不应作为普通 text paragraph。
+  // English: Markdown table rows are usually pipe-wrapped; do not emit them as text paragraphs.
   return lines.length > 0 && lines.every((line) => /^\s*\|.*\|\s*$/.test(line));
 }
 
+/**
+ * Convert accumulated lines into one paragraph.
+ *
+ * 中文：PDF/MinerU 输出常把一个自然段拆成多行，因此这里用空格拼回一段。
+ * English: PDF/MinerU output often soft-wraps one paragraph across lines, so join with spaces.
+ */
 function makeParagraph(textLines: string[]): string | null {
   if (textLines.length === 0 || isTableParagraph(textLines)) {
     return null;
@@ -57,6 +95,15 @@ function makeParagraph(textLines: string[]): string | null {
   return text.length > 0 ? text : null;
 }
 
+/**
+ * Select the article body from MinerU Markdown.
+ *
+ * 中文：MinerU 输出常以 `Article` 开头，并在 `References` 后进入参考文献。
+ * 这里从 `Article` 之后开始，到 References/Acknowledgements 等末尾章节之前停止。
+ *
+ * English: MinerU output often starts with `Article` and later enters references.
+ * This returns only the paper body region used for paragraph blocks.
+ */
 function articleLines(markdown: string): string[] {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const articleIndex = lines.findIndex((line) => ARTICLE_MARKER.test(line.trim()));
@@ -73,6 +120,16 @@ function articleLines(markdown: string): string[] {
   return stopIndex >= 0 ? selected.slice(0, stopIndex) : selected;
 }
 
+/**
+ * Map a visible heading to a normalized core paper section.
+ *
+ * 中文：`section` 保存原始标题，例如 `Divergent estimates...`；
+ * `coreSection` 保存通用论文结构，例如 `results`、`methods`。
+ * 这样 UI 可以按原文标题显示，也可以按通用类别过滤。
+ *
+ * English: `section` keeps the original heading, while `coreSection` stores a
+ * normalized paper role for filtering/navigation.
+ */
 function classifyHeading(text: string): CoreSection | null {
   const normalized = text.trim().toLowerCase();
 
@@ -101,6 +158,15 @@ function classifyHeading(text: string): CoreSection | null {
   return null;
 }
 
+/**
+ * Identify title-page metadata paragraphs.
+ *
+ * 中文：Nature 类文章标题下会有 Received/Accepted/Published、作者等信息。
+ * 这些不是 abstract/introduction，因此归到 `frontmatter`。
+ *
+ * English: Nature-style papers put dates/authors under the title; those belong
+ * to `frontmatter`, not abstract/introduction.
+ */
 function isMetadataParagraph(text: string): boolean {
   return (
     /^(received|accepted|published online):/i.test(text) ||
@@ -109,6 +175,19 @@ function isMetadataParagraph(text: string): boolean {
   );
 }
 
+/**
+ * Infer abstract/introduction when headings are missing.
+ *
+ * 中文：很多期刊没有显式 `Abstract` 和 `Introduction` 标题。
+ * 当前策略：
+ * - 元数据段 -> `frontmatter`
+ * - 标题区第一个非元数据正文段 -> `abstract`
+ * - 标题区后续正文段 -> `introduction`
+ *
+ * English: many journals omit explicit Abstract/Introduction headings.
+ * The first substantive title-section paragraph is treated as abstract; later
+ * title-section paragraphs are introduction.
+ */
 function inferTitleSectionRole(
   text: string,
   titleSectionParagraphCount: number
@@ -124,6 +203,27 @@ function inferTitleSectionRole(
   return "introduction";
 }
 
+/**
+ * Split MinerU Markdown into ordered raw text blocks.
+ *
+ * 中文主流程：
+ * 1. 取 Article 正文；
+ * 2. 用标题更新当前 section/coreSection；
+ * 3. 用空行切自然段；
+ * 4. 给每段生成 RawMineruBlock；
+ * 5. 显式写入 `order`，后续 block ID 不依赖临时数组索引。
+ *
+ * English workflow:
+ * 1. select article body;
+ * 2. update current section/coreSection from headings;
+ * 3. split paragraphs on blank lines;
+ * 4. emit RawMineruBlock for each paragraph;
+ * 5. preserve explicit order for stable downstream processing.
+ *
+ * Parameters:
+ * 中文：`markdown` 是 MinerU 下载的完整 Markdown；`options.title` 可来自 Zotero 元数据。
+ * English: `markdown` is the full MinerU Markdown; `options.title` can come from Zotero metadata.
+ */
 export function markdownToTextBlocks(
   markdown: string,
   options: MarkdownToTextBlocksOptions = {}
@@ -136,6 +236,8 @@ export function markdownToTextBlocks(
   let titleSectionContentBlocks = 0;
 
   const flush = (): void => {
+    // 中文：flush 是“把当前缓存段落落盘为 block”的内部函数。
+    // English: flush turns buffered paragraph lines into one block.
     const text = makeParagraph(paragraphLines);
     paragraphLines.length = 0;
 
@@ -159,6 +261,8 @@ export function markdownToTextBlocks(
       markdown: text
     });
 
+    // 中文：只统计标题区正文段，不统计 frontmatter，这样第一段正文能正确推断为 abstract。
+    // English: count only substantive title-section paragraphs so the first becomes abstract.
     if (titleSection && currentSection === titleSection && coreSection !== "frontmatter") {
       titleSectionContentBlocks += 1;
     }
@@ -177,10 +281,14 @@ export function markdownToTextBlocks(
       flush();
       currentSection = heading.text || currentSection;
 
+      // 中文：第一层标题通常是论文题名，用它锁定“标题区段”。
+      // English: the first level-1 heading is usually the paper title section.
       if (heading.level === 1 && blocks.length === 0) {
         titleSection = currentSection || options.title || null;
       }
 
+      // 中文：没有识别到的子标题会继承上一核心章节，例如 Results 下的小节。
+      // English: unrecognized subheadings inherit the previous core section.
       currentCoreSection = classifyHeading(currentSection) ?? currentCoreSection;
       continue;
     }
@@ -192,6 +300,15 @@ export function markdownToTextBlocks(
   return blocks;
 }
 
+/**
+ * Ensure raw MinerU data has text blocks before normalization.
+ *
+ * 中文：如果 MinerU 未来返回结构化 blocks，则直接信任 provider-supplied blocks；
+ * 如果只返回 Markdown，则使用本文件的 fallback 拆分。
+ *
+ * English: if MinerU/provider supplies blocks, keep them. If not, fall back to
+ * Markdown paragraph splitting.
+ */
 export function ensureMarkdownTextBlocks(raw: RawMineruDocument): RawMineruDocument {
   if (raw.blocks.length > 0) {
     return raw;
