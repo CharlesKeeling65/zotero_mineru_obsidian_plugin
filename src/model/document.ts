@@ -57,10 +57,13 @@ export interface DocumentParseMetadata {
  * Lightweight aggregate counts.
  *
  * 中文：UI/export 可以先读 stats，而不必遍历所有 block/asset/relation。
+ * 新增 chunkCount 用于支持 RAG 检索统计。
  * English: lets UI/export show summary counts without scanning all entities.
+ * The new chunkCount supports RAG retrieval statistics.
  */
 export interface DocumentStats {
   blockCount: number;
+  chunkCount: number;
   assetCount: number;
   relationCount: number;
 }
