@@ -4,6 +4,7 @@ import { basename, extname } from "node:path";
 import type { MineruStandardConfig } from "./config.js";
 import type { MineruProvider, ParsePdfInput, ParsePdfOutput } from "./client.js";
 import { AppError } from "../utils/errors.js";
+import { defaultLogger } from "../utils/logger.js";
 
 /**
  * MinerU Standard API envelope.
@@ -201,6 +202,7 @@ export class MineruStandardProvider implements MineruProvider {
   public async parsePdf(input: ParsePdfInput): Promise<ParsePdfOutput> {
     const fileName = basename(input.pdfPath);
     const stem = fileName.slice(0, fileName.length - extname(fileName).length);
+    defaultLogger.info("开始 MinerU Standard 解析", { pdfPath: input.pdfPath, fileName });
 
     // 中文：第 1 步，上传 PDF 到临时 URL（这里简化处理，实际可能需要先获取上传 URL）。
     // English: Step 1, upload PDF to temporary URL (simplified here, may need to get upload URL first).
@@ -225,6 +227,7 @@ export class MineruStandardProvider implements MineruProvider {
     );
     const createData = this.readApiData(createResponse, "create MinerU task");
     const taskId = createData.task_id;
+    defaultLogger.info("MinerU Standard 任务创建成功", { taskId });
 
     if (!taskId) {
       throw this.parseError("MinerU task creation did not return task_id.");
@@ -232,15 +235,19 @@ export class MineruStandardProvider implements MineruProvider {
 
     // 中文：第 3 步，轮询任务直到完成。
     // English: Step 3, poll until task completes.
+    defaultLogger.info("开始轮询 MinerU Standard 任务状态", { taskId });
     const resultZipUrl = await this.pollForResultUrl(taskId);
+    defaultLogger.info("MinerU Standard 任务完成，开始下载结果", { taskId, resultZipUrl });
 
     // 中文：第 4 步，下载结果 ZIP 包。
     // English: Step 4, download result ZIP package.
     const zipData = await this.transport.getBinary(resultZipUrl);
+    defaultLogger.info("MinerU Standard 结果下载完成", { taskId, zipSize: zipData.length });
 
     // 中文：第 5 步，解析 ZIP 包，提取 Markdown 和其他文件。
     // English: Step 5, parse ZIP package, extract Markdown and other files.
     const { markdown, rawFiles } = await this.parseZipPackage(zipData, stem);
+    defaultLogger.info("MinerU Standard 解析完成", { taskId, markdownLength: markdown.length, rawFilesCount: rawFiles.length });
 
     return {
       document: {

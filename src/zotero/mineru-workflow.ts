@@ -17,6 +17,7 @@ import {
 import { resolvePdfSelection, type ResolvePdfSelectionInput } from "./selection.js";
 import type { RagIntegration } from "../rag/rag-integration.js";
 import { AttachmentManager, createAttachmentManager, type AttachmentManagerConfig } from "./attachment-manager.js";
+import { defaultLogger } from "../utils/logger.js";
 
 /**
  * End-to-end input for the Zotero -> MinerU -> normalized document workflow.
@@ -152,6 +153,14 @@ class PdfSiblingParseCache implements ParseCache {
 export async function parseSelectedPdfWithMineru(
   input: ParseSelectedPdfWithMineruInput
 ): Promise<ParseSelectedPdfWithMineruOutput> {
+  defaultLogger.info("开始 Zotero MinerU 工作流", { 
+    title: input.title,
+    providerBackend: input.provider.backendName,
+    hasTranslation: !!input.translationProvider,
+    hasRag: !!input.ragIntegration,
+    hasAttachmentManager: !!input.attachmentManagerConfig
+  });
+
   // 中文：Zotero 可能选中父条目或 PDF attachment；selection 层负责兼容这些形态。
   // English: selection layer supports either parent item or direct PDF attachment selection.
   const selection = resolvePdfSelection({ selectedItem: input.selectedItem });
@@ -161,25 +170,35 @@ export async function parseSelectedPdfWithMineru(
   // 中文：优先使用父条目的 key 做 document identity，attachment key 作为 fallback。
   // English: prefer parent item key for document identity; fallback to attachment key.
   const zoteroItemKey = selection.parentItemKey ?? selection.attachment.key;
+  defaultLogger.info("PDF 选择解析完成", { pdfPath, zoteroItemKey, outputDir });
+
   const service = new ParseService({
     provider: input.provider,
     cache: new PdfSiblingParseCache(outputDir, pdfBaseName)
   });
 
+  defaultLogger.info("开始 MinerU 解析服务", { pdfPath, title: input.title });
   const normalized = await service.parse({
     docId: `zotero_${zoteroItemKey}`,
     zoteroItemKey,
     pdfPath,
     title: input.title
   });
+  defaultLogger.info("MinerU 解析完成", { 
+    docId: normalized.document.docId,
+    blockCount: normalized.document.blocks.length,
+    rawFilesCount: normalized.rawFiles.length
+  });
 
   if (input.translationProvider && input.annotationWriter) {
     // 中文：翻译是可选增强层；它读取 block，不修改 raw block 内容，符合 AI 输出分离原则。
     // English: translation is an optional derived layer; it does not mutate raw block content.
+    defaultLogger.info("开始文档翻译", { blockCount: normalized.document.blocks.length });
     const translations = await translateDocumentTextBlocks(
       normalized,
       input.translationProvider
     );
+    defaultLogger.info("文档翻译完成", { translationCount: translations.length });
     // 中文：只有 provider 存在时才尝试精确定位 PDF rects；没有 rects 时仍可生成注释 payload。
     // English: exact PDF rect matching is attempted only when a location provider is supplied.
     const textLocations = input.textLocationProvider
@@ -201,13 +220,16 @@ export async function parseSelectedPdfWithMineru(
     // English: If RAG integration is configured, index document to RAG service.
     let ragIntegrationResult;
     if (input.ragIntegration) {
+      defaultLogger.info("开始 RAG 集成索引", { pdfPath, zoteroItemKey });
       try {
         ragIntegrationResult = await input.ragIntegration.indexDocument(
           normalized,
           pdfPath
         );
+        defaultLogger.info("RAG 集成完成", { status: ragIntegrationResult.status });
       } catch (error) {
         console.error("RAG integration failed:", error);
+        defaultLogger.error("RAG 集成失败", { error: (error as Error).message });
         ragIntegrationResult = {
           status: "error",
           message: "RAG integration failed",
@@ -250,6 +272,7 @@ export async function parseSelectedPdfWithMineru(
   // English: If attachment manager is configured, add parse result files to Zotero item.
   let attachmentResult;
   if (input.attachmentManagerConfig) {
+    defaultLogger.info("开始附件管理", { zoteroItemKey, rawFilesCount: normalized.rawFiles.length });
     try {
       const attachmentManager = createAttachmentManager(input.attachmentManagerConfig);
       const addedCount = await attachmentManager.addMineruFilesToItem(
@@ -258,12 +281,14 @@ export async function parseSelectedPdfWithMineru(
         pdfPath
       );
       const stats = await attachmentManager.getAttachmentStats(zoteroItemKey);
+      defaultLogger.info("附件管理完成", { addedCount, totalAttachments: stats.total });
       attachmentResult = {
         addedCount,
         stats
       };
     } catch (error) {
       console.error("Attachment management failed:", error);
+      defaultLogger.error("附件管理失败", { error: (error as Error).message });
       attachmentResult = {
         addedCount: 0,
         stats: { total: 0, byType: {} }

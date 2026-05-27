@@ -67,3 +67,14 @@ export function createLogger(options: CreateLoggerOptions = {}): Logger {
     }
   };
 }
+
+/**
+ * 默认 logger 实例，方便各模块直接使用。
+ *
+ * 中文：所有模块可以直接导入 `defaultLogger` 记录日志，
+ * 也可以使用 `createLogger` 创建自定义 logger。
+ *
+ * English: All modules can import `defaultLogger` directly for logging,
+ * or use `createLogger` to create custom loggers.
+ */
+export const defaultLogger: Logger = createLogger({ level: "debug" });

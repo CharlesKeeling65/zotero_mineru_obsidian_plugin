@@ -4,6 +4,7 @@ import { basename, extname } from "node:path";
 import type { MineruAgentConfig } from "./config.js";
 import type { MineruProvider, ParsePdfInput, ParsePdfOutput } from "./client.js";
 import { AppError } from "../utils/errors.js";
+import { defaultLogger } from "../utils/logger.js";
 
 /**
  * MinerU Agent API envelope.
@@ -215,6 +216,7 @@ export class MineruAgentProvider implements MineruProvider {
 
   public async parsePdf(input: ParsePdfInput): Promise<ParsePdfOutput> {
     const fileName = basename(input.pdfPath);
+    defaultLogger.info("开始 MinerU Agent 解析", { pdfPath: input.pdfPath, fileName });
 
     // 中文：第 1 步，向 MinerU 创建任务。这里不要上传文件内容，只传文件名和解析参数。
     // English: Step 1, create a task. The file content is not uploaded in this request.
@@ -231,6 +233,7 @@ export class MineruAgentProvider implements MineruProvider {
     const createData = this.readApiData(createResponse, "create MinerU file task");
     const taskId = createData.task_id;
     const fileUrl = createData.file_url;
+    defaultLogger.info("MinerU Agent 任务创建成功", { taskId, fileUrl });
 
     if (!taskId || !fileUrl) {
       throw this.parseError("MinerU task creation did not return task_id and file_url.");
@@ -238,12 +241,17 @@ export class MineruAgentProvider implements MineruProvider {
 
     // 中文：第 2 步，把 PDF 二进制 PUT 到签名 URL。不要设置额外 Content-Type。
     // English: Step 2, PUT the PDF bytes to the signed URL. Avoid extra Content-Type.
+    defaultLogger.info("开始上传 PDF 到 MinerU", { fileUrl, pdfPath: input.pdfPath });
     await this.transport.putBinary(fileUrl, await this.readLocalFile(input.pdfPath));
+    defaultLogger.info("PDF 上传完成", { fileUrl });
 
     // 中文：第 3-4 步，轮询任务直到 MinerU 给出 markdown_url，然后下载 Markdown。
     // English: Step 3-4, poll until `markdown_url` exists, then download Markdown.
+    defaultLogger.info("开始轮询 MinerU 任务状态", { taskId });
     const markdownUrl = await this.pollForMarkdownUrl(taskId);
+    defaultLogger.info("MinerU 任务完成，开始下载 Markdown", { taskId, markdownUrl });
     const markdown = await this.transport.getText(markdownUrl);
+    defaultLogger.info("Markdown 下载完成", { taskId, markdownLength: markdown.length });
     const stem = fileName.slice(0, fileName.length - extname(fileName).length);
 
     return {
