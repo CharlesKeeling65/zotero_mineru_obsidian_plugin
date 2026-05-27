@@ -26,3 +26,16 @@ export {
   type ZoteroReaderTextRun,
   type ZoteroTextLocation
 } from "./zotero/text-location.js";
+
+// RAG integration exports
+export {
+  RagClient,
+  createRagClientFromSettings,
+  type RagClientConfig
+} from "./rag/rag-client.js";
+export {
+  RagIntegration,
+  createRagIntegration,
+  type RagIntegrationStatus,
+  type RagIntegrationResult
+} from "./rag/rag-integration.js";
