@@ -1,270 +1,373 @@
 # Structured Literature Workspace
 
-Zotero 8/9 plugin baseline for turning a selected paper PDF into a structured, paragraph-level literature workspace using MinerU as the parser and Zotero as the reading surface.
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
+[![Zotero](https://img.shields.io/badge/Zotero-8/9-red.svg)](https://www.zotero.org/)
+[![MinerU](https://img.shields.io/badge/MinerU-API-green.svg)](https://mineru.net/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This is not a generic PDF-to-Markdown utility. The project is building the infrastructure for block-level academic reading, translation, export, and future AI-assisted understanding.
+A Zotero 8/9 plugin that transforms PDF papers into structured, paragraph-level literature workspaces using MinerU as the parsing engine and Zotero as the reading surface.
 
-## Current Status
+**This is not a generic PDF-to-Markdown utility.** The project builds infrastructure for block-level academic reading, translation, export, and future AI-assisted understanding.
 
-Implemented:
+## Key Features
 
-- MinerU Agent API flow for local PDF parsing in Python: create task, upload PDF, poll result, download Markdown, and save it next to the source PDF with the same base name.
-- TypeScript MinerU Agent provider with task creation, signed upload, polling, Markdown download, raw-file persistence, and provider abstraction for future backends.
-- Zotero PDF selection helpers and a workflow wrapper that stores MinerU outputs beside the selected attachment PDF.
-- Markdown preprocessing fallback that splits the MinerU `Article` Markdown body into ordered paragraph `text` blocks when MinerU does not return layout blocks.
-- Normalization into typed internal entities: `Document`, `Block`, `Asset`, `Relation`, and `AIAnnotation`.
-- Deterministic block IDs based on stable document/block inputs while preserving explicit `order`.
-- Contextual paragraph translation interface that receives the full document, section path, previous paragraph, and next paragraph.
-- Zotero Reader text-location matching core: paragraph text can be matched against page text runs to produce `position.rects`.
-- Zotero annotation payload builder for gray translation cards: the highlighted quote is the source paragraph, the annotation comment is the translation, and resolved reader rects are used when available.
-- Plugin manifest/bootstrap modules and lightweight logger/error primitives.
-- Unit tests for parsing, normalization, bootstrap, errors, markdown splitting, contextual translation, Zotero annotation payloads, and the integrated MinerU workflow.
+### Dual MinerU API Integration
+- **Standard API (精准解析)**: High-precision parsing with deep structure extraction, multimodal support (tables/formulas/images), and complex layout adaptation
+- **Agent API (轻量解析)**: Lightweight parsing with IP-based rate limiting, no authentication required
 
-Not implemented yet:
+### Zotero Integration
+- **Reader Toolbar Button**: One-click parsing directly from Zotero's PDF reader
+- **Attachment Management**: Automatic addition of parsed results (Markdown, JSON, images) to Zotero items
+- **Annotation Support**: Gray translation highlight cards with PDF page anchoring
 
-- Packaged Zotero UI/menu command for invoking the full workflow from the Zotero reader.
-- Runtime extraction of page text runs from the live Zotero Reader instance.
-- True live Zotero page-anchored highlight creation inside a running Zotero window. Payloads can now carry rects, but live runtime creation still needs host binding.
-- Real translation API provider. The current translation layer is an interface and workflow integration point.
-- Vault export beyond the current raw Markdown/JSON baseline.
-- Settings UI for API keys, vault paths, translation providers, and workflow options.
+### Structured Data Processing
+- **Block-Level Parsing**: Text, figure, table, and formula classification
+- **Enhanced Chunking**: Leverages MinerU's advanced API results for intelligent text segmentation
+- **Normalization Layer**: Converts raw MinerU output into typed internal entities
 
-## Workflow
+### Knowledge Management
+- **RAG Integration**: Automatic indexing to Retrieval-Augmented Generation services
+- **Translation Support**: Contextual paragraph translation with full document awareness
+- **Vault Export**: Structured export to local knowledge vaults
+
+## Quick Start
+
+### Prerequisites
+- Node.js >= 20
+- Zotero 8 or 9
+- MinerU API access (Standard API requires token, Agent API is free)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/zotero-mineru-structured-literature-workspace.git
+cd zotero-mineru-structured-literature-workspace
+
+# Install dependencies
+npm install
+
+# Build the plugin
+npm run build
+```
+
+### Basic Usage
+
+1. **Parse a PDF from Zotero Reader**:
+   - Open a PDF in Zotero's built-in reader
+   - Click the "MinerU 解析" button in the toolbar
+   - Wait for parsing to complete
+   - View structured results in the Zotero panel
+
+2. **Parse via Command Line** (for testing):
+   ```bash
+   python scripts/mineru_agent_parse.py "/path/to/paper.pdf"
+   ```
+
+3. **Run Tests**:
+   ```bash
+   npm test
+   npm run check
+   ```
+
+## Architecture
+
+The system follows a layered architecture with clear separation of concerns:
+
+```mermaid
+graph TB
+    subgraph "Zotero Layer"
+        A[Zotero Reader] --> B[Toolbar Button]
+        B --> C[Workflow Orchestrator]
+    end
+    
+    subgraph "MinerU Layer"
+        C --> D{API Selection}
+        D --> E[Standard API Provider]
+        D --> F[Agent API Provider]
+        E --> G[Result Parser]
+        F --> G
+    end
+    
+    subgraph "Processing Layer"
+        G --> H[Markdown Preprocessor]
+        H --> I[Normalizer]
+        I --> J[Enhanced Chunk Converter]
+    end
+    
+    subgraph "Integration Layer"
+        J --> K[Attachment Manager]
+        J --> L[RAG Integration]
+        J --> M[Translation Provider]
+        K --> N[Zotero Items]
+        L --> O[Vector Database]
+        M --> P[Translation API]
+    end
+    
+    subgraph "Output Layer"
+        N --> Q[Structured Document]
+        O --> R[Searchable Chunks]
+        P --> S[Translated Content]
+    end
+```
+
+### Core Workflow
 
 ```text
 Selected Zotero PDF
-  -> MinerU Agent parse
-  -> sibling Markdown output
-  -> Markdown Article preprocessing
-  -> ordered paragraph RawMineruBlock[]
-  -> normalized Document/Block model
-  -> contextual paragraph translation provider
-  -> Zotero Reader text-location provider
-  -> paragraph PDF rects
-  -> gray Zotero translation annotation payloads
-  -> future Zotero.Annotations.saveFromJSON runtime write
+  → MinerU API Parse (Standard or Agent)
+  → Raw Result Download (Markdown, JSON, Images)
+  → Markdown Preprocessing
+  → Block-Level Normalization
+  → Enhanced Chunking (using API metadata)
+  → Attachment Management (add to Zotero item)
+  → RAG Integration (optional)
+  → Translation (optional)
+  → Zotero Annotation Creation (optional)
 ```
 
-## Core Modules
-
-| Area | File | Responsibility |
-| --- | --- | --- |
-| Python MinerU debug flow | `scripts/mineru_agent_parse.py` | Parses one local PDF with MinerU Agent API and writes sibling `.md`. |
-| MinerU TypeScript provider | `src/mineru/provider-agent.ts` | Creates MinerU Agent tasks, uploads PDFs, polls status, downloads Markdown. |
-| Parse orchestration | `src/parse/parse-service.ts` | Runs provider, persists raw files, preprocesses Markdown fallback, normalizes output. |
-| Markdown preprocessing | `src/parse/markdown-preprocessor.ts` | Extracts the `Article` body, stops before references-like sections, skips Markdown tables, emits ordered paragraph text blocks. |
-| Internal model | `src/model/` | Defines document, block, asset, relation, annotation, and schema-version types. |
-| Normalization | `src/normalize/normalizer.ts` | Converts raw MinerU-shaped data into internal schema with deterministic block IDs and section tree. |
-| Translation interface | `src/translate/provider.ts` | Defines `translateParagraph(request)`. |
-| Translation orchestration | `src/translate/contextual-translator.ts` | Sends each text block to the translation provider with full-document and neighbor context. |
-| Zotero text locations | `src/zotero/text-location.ts` | Matches source paragraphs to Zotero Reader page text runs and returns page rectangles. |
-| Zotero annotations | `src/zotero/annotations.ts` | Builds gray highlight annotation payloads and wraps `Zotero.Annotations.saveFromJSON`. |
-| Zotero workflow | `src/zotero/mineru-workflow.ts` | Resolves selected PDF, runs parsing, writes sibling files, optionally translates, resolves text locations, and creates annotations. |
-| Markdown inspection | `scripts/inspect_markdown_blocks.mjs` | Prints real Markdown split results after `npm run build`. |
-| Public exports | `src/main.ts` | Re-exports plugin, MinerU, preprocessing, translation, and annotation APIs. |
-
-## MinerU Agent Parameters
-
-Python debug script: `scripts/mineru_agent_parse.py`
-
-| Parameter | Location | Default | Meaning |
-| --- | --- | --- | --- |
-| `pdf_path` | CLI positional argument | required | Local PDF to parse. |
-| `--base-url` | CLI option | `https://mineru.net/api/v1/agent` | MinerU Agent API base URL. |
-| `--poll-interval` | CLI option | `3` seconds | Poll interval for task status. |
-| `--timeout` | CLI option | `300` seconds | Max wait for task completion. |
-| `language` | `MineruAgentClient.parse_file()` | `ch` | MinerU language hint. |
-| `enable_table` | `MineruAgentClient.parse_file()` | `true` | Ask MinerU to parse tables. |
-| `is_ocr` | `MineruAgentClient.parse_file()` | `false` | OCR mode flag. |
-| `enable_formula` | `MineruAgentClient.parse_file()` | `true` | Ask MinerU to parse formulas. |
-| `page_range` | `MineruAgentClient.parse_file()` | unset | Optional page range for parsing. |
-
-TypeScript provider: `src/mineru/provider-agent.ts`
-
-| Parameter | Location | Default | Meaning |
-| --- | --- | --- | --- |
-| `baseUrl` | `MineruAgentConfig` | required by caller | MinerU Agent API base URL. |
-| `apiKey` | `MineruAgentConfig` | optional | Sent as `Authorization: Bearer <apiKey>` for JSON API calls. |
-| `timeoutMs` | `MineruAgentConfig` | `300000` | Max status polling duration. |
-| `pollIntervalMs` | `MineruAgentConfig` | `3000` | Status polling interval. |
-| `file_name` | create-task request body | PDF basename | MinerU upload filename. |
-| `language` | create-task request body | `ch` | MinerU language hint. |
-| `enable_table` | create-task request body | `true` | Table parsing flag. |
-| `is_ocr` | create-task request body | `false` | OCR parsing flag. |
-| `enable_formula` | create-task request body | `true` | Formula parsing flag. |
-
-Important upload detail: signed upload URLs must not receive an arbitrary non-empty `Content-Type` header. The Python transport explicitly sends an empty `Content-Type` to avoid OSS `SignatureDoesNotMatch` failures. The TypeScript `fetch` upload does not set `Content-Type`.
-
-## Markdown Paragraph Splitting
-
-When MinerU returns only Markdown, `ensureMarkdownTextBlocks()` creates fallback text blocks before normalization.
-
-Rules currently implemented in `src/parse/markdown-preprocessor.ts`:
-
-- Start after a standalone `Article` marker when present.
-- Treat Markdown headings as section boundaries.
-- Stop before references-like terminal sections such as `References`, `Bibliography`, `Acknowledgments`, `Author Contributions`, `Competing Interests`, and `Supplementary`.
-- Split paragraphs on blank lines.
-- Join soft-wrapped lines inside the same paragraph.
-- Skip pure Markdown table paragraphs.
-- Set fallback `pageStart` and `pageEnd` to `1` because MinerU fast Agent Markdown does not contain layout coordinates.
-- Preserve explicit paragraph order as `order: 1..n`.
-
-### How to Verify Splitting With the Real MinerU Markdown
-
-The split behavior is tested against the real MinerU Markdown generated from the Wang et al. 2026 PDF:
-
-```text
-/Users/wyb/File/Seafile/Obsidian_repository/Research-knowledge_base/Reading Papers/0_All_Paper_PDF/2026/Nature Food/Wang 等 - 2026 - A framework for estimating manure nitrogen balance and recyc.md
-```
-
-The test file is `tests/parse/markdown-preprocessor.test.ts`. It reads that real Markdown path by default, or reads `REAL_MINERU_MARKDOWN_PATH` when the environment variable is set.
-
-```bash
-npm test -- tests/parse/markdown-preprocessor.test.ts
-```
-
-Current assertions for that real Markdown:
-
-- The Markdown splits into `102` ordered text blocks.
-- Block `1` is `coreSection: "frontmatter"` under the paper-title section and contains the received date.
-- Block `6` is `coreSection: "abstract"` and contains the inferred abstract opening paragraph.
-- Block `7` begins the inferred `coreSection: "introduction"` because this Nature-style Markdown has no explicit Introduction heading.
-- Block `14` is `coreSection: "results"` under the `Divergent estimates in evaluating manure recycling` section.
-- At least one block is classified as `coreSection: "discussion"` and at least one block is classified as `coreSection: "methods"`.
-- The final block is `coreSection: "availability"` under `Code availability`.
-- No generated block is assigned to the `References` section.
-
-To inspect the actual split output instead of only seeing a test pass/fail result, build once and run:
-
-```bash
-npm run build
-npm run inspect:markdown-blocks -- "/Users/wyb/File/Seafile/Obsidian_repository/Research-knowledge_base/Reading Papers/0_All_Paper_PDF/2026/Nature Food/Wang 等 - 2026 - A framework for estimating manure nitrogen balance and recyc.md" 8
-```
-
-The command prints JSON with `blockCount`, the first N blocks, and the last 3 blocks so paragraph boundaries and section assignment can be reviewed directly.
-
-## Translation and Zotero Annotation Payloads
-
-Translation request shape: `src/translate/provider.ts`
-
-```ts
-interface ParagraphTranslationRequest {
-  text: string;
-  fullDocumentMarkdown: string;
-  documentTitle: string;
-  sectionPath: string[];
-  previousParagraph: string | null;
-  nextParagraph: string | null;
-  order: number;
-}
-```
-
-Annotation payload shape: `src/zotero/annotations.ts`
-
-```ts
-interface ZoteroTranslationAnnotationPayload {
-  key: string;
-  type: "highlight";
-  text: string;
-  comment: string;
-  color: "#aaaaaa";
-  pageLabel: string;
-  sortIndex: string;
-  position: {
-    pageIndex: number;
-    rects: number[][];
-  };
-  tags: [{ name: "mineru-translation" }];
-}
-```
-
-Current behavior:
-
-- `text` is the source paragraph shown as the highlight quote.
-- `comment` is the translated paragraph shown in the Zotero annotation card.
-- `color` is gray: `#aaaaaa`.
-- `tags` includes `mineru-translation`.
-- `position.rects` is populated when `textLocationProvider` resolves the source paragraph against Zotero Reader page text runs.
-- `position.rects` remains empty only when no text-location provider is supplied or no match is found.
-
-Zotero reference context:
-
-- Zotero stores PDF reader annotations in its database: <https://www.zotero.org/support/kb/annotations_in_database>
-- Zotero local JavaScript API docs are intentionally limited and often require source inspection: <https://www.zotero.org/support/dev/client_coding/javascript_api>
-- Runtime write adapter currently targets `Zotero.Annotations.saveFromJSON`.
-
-## Local MinerU Debug Command
-
-```bash
-python scripts/mineru_agent_parse.py "/absolute/path/to/paper.pdf"
-```
-
-Expected result:
-
-- Creates `/absolute/path/to/paper.md`.
-- The output Markdown is written beside the PDF.
-- The output base name matches the PDF base name.
-
-The live debug flow has been tested against a real PDF and produced sibling Markdown. Network access and MinerU account/API availability are external requirements.
-
-## Test and Build
-
-```bash
-npm test
-npm run check
-npm run build
-npm run inspect:markdown-blocks -- "/absolute/path/to/paper.md" 8
-python -m unittest tests/python/test_mineru_agent_parse.py
-```
-
-Current verified baseline:
-
-- `npm test`: unit tests for TypeScript parse/normalize/Zotero/translation modules.
-- `npm run check`: TypeScript type-check.
-- `npm run build`: compile `src/` to `dist/`.
-- `npm run inspect:markdown-blocks -- <markdown> <count>`: prints real Markdown block split output for manual review.
-- Python unit tests cover the local MinerU debug client and signed upload header behavior.
-
-## Repository Layout
+### Module Structure
 
 ```text
 src/
-  ai/
-  export/
-  main.ts
-  mineru/
-  model/
-  normalize/
-  parse/
-  plugin/
-  prefs/
-  translate/
-  types/
-  ui/
-  utils/
-  zotero/
-scripts/
-tests/
-docs/plans/
+├── mineru/                    # MinerU API integration
+│   ├── client.ts              # Provider interface
+│   ├── config.ts              # Configuration types
+│   ├── provider-agent.ts      # Agent API implementation
+│   └── provider-standard.ts   # Standard API implementation
+├── zotero/                    # Zotero integration
+│   ├── annotations.ts         # Annotation payload builder
+│   ├── attachment-manager.ts  # File attachment management
+│   ├── reader-toolbar.ts      # Reader UI integration
+│   └── mineru-workflow.ts     # Core workflow orchestrator
+├── normalize/                 # Data normalization
+│   ├── normalizer.ts          # Raw to internal schema conversion
+│   ├── chunk-converter.ts     # Standard chunking
+│   └── enhanced-chunk-converter.ts  # API-enhanced chunking
+├── model/                     # Internal data models
+│   ├── document.ts            # Document entity
+│   ├── block.ts               # Block entity
+│   ├── chunk.ts               # Chunk entity
+│   └── asset.ts               # Asset entity
+├── parse/                     # Parsing orchestration
+│   ├── parse-service.ts       # Main parse service
+│   └── markdown-preprocessor.ts  # Markdown processing
+├── translate/                 # Translation services
+│   ├── provider.ts            # Translation interface
+│   └── contextual-translator.ts  # Context-aware translation
+├── rag/                       # RAG integration
+│   └── rag-integration.ts     # Vector database indexing
+├── export/                    # Vault export
+├── ai/                        # AI extension points
+├── ui/                        # UI components
+└── utils/                     # Utilities
 ```
 
-## Zotero Compatibility Baseline
+## API Documentation
 
-This repository targets Zotero 8 as the minimum baseline and keeps Zotero 9 forward compatibility in mind. New code should avoid Zotero 7-only assumptions unless isolated behind an adapter.
+### MinerU Standard API
 
-For annotation anchoring, the next technical step is the Zotero runtime host binding: extract page text runs and rectangles from the live Reader instance, pass them into `ZoteroReaderTextLocationProvider`, and call `Zotero.Annotations.saveFromJSON` with the generated payloads.
+High-precision parsing with rich metadata extraction.
+
+```typescript
+interface MineruStandardConfig {
+  baseUrl: string;           // e.g., "https://mineru.net/api/v4"
+  apiKey: string;            // Required for authentication
+  modelVersion?: "pipeline" | "vlm" | "MinerU-HTML";
+  isOcr?: boolean;           // Enable OCR
+  enableFormula?: boolean;   // Enable formula recognition
+  enableTable?: boolean;     // Enable table recognition
+  language?: string;         // Document language (default: "ch")
+  pageRanges?: string;       // e.g., "1-5,8"
+  extraFormats?: string[];   // e.g., ["docx", "html"]
+}
+```
+
+**Workflow**: POST `/extract/task` → Poll `/extract/task/{id}` → Download ZIP → Parse results
+
+### MinerU Agent API
+
+Lightweight parsing with IP-based rate limiting.
+
+```typescript
+interface MineruAgentConfig {
+  baseUrl: string;           // e.g., "https://mineru.net/api/v1/agent"
+  apiKey?: string;           // Optional for future auth
+  timeoutMs?: number;        // Parse timeout (default: 300000)
+  pollIntervalMs?: number;   // Poll interval (default: 3000)
+}
+```
+
+**Workflow**: Create task → Upload file → Poll status → Download Markdown
+
+### Internal Data Model
+
+```typescript
+interface Document {
+  docId: string;
+  zoteroItemKey: string;
+  title: string;
+  blocks: Block[];
+  rawFiles: RawMineruFile[];
+}
+
+interface Block {
+  blockId: string;
+  type: "text" | "figure" | "table" | "formula";
+  content: BlockContent;
+  sectionPath: string[];
+  pageRange: PageRange;
+  order: number;
+}
+
+interface Chunk {
+  chunkId: string;
+  itemKey: string;
+  documentId: string;
+  blockId: string;
+  chunkLevel: "paragraph" | "section";
+  text: string;
+  context: ChunkContext;
+  metadata: ChunkMetadata;
+  retrieval: ChunkRetrievalInfo;
+}
+```
+
+## Development
+
+### Building
+
+```bash
+# Type checking
+npm run check
+
+# Build for production
+npm run build
+
+# Run tests
+npm test
+
+# Inspect markdown blocks
+npm run inspect:markdown-blocks -- "/path/to/paper.md" 8
+```
+
+### Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run specific test file
+npm test -- tests/parse/markdown-preprocessor.test.ts
+
+# Run Python tests
+python -m unittest tests/python/test_mineru_agent_parse.py
+```
+
+### Debugging
+
+```bash
+# Parse a PDF with Python debug script
+python scripts/mineru_agent_parse.py "/absolute/path/to/paper.pdf"
+
+# Expected output: Creates paper.md in the same directory
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# MinerU Standard API
+MINERU_STANDARD_API_KEY=your_api_key_here
+MINERU_STANDARD_BASE_URL=https://mineru.net/api/v4
+
+# MinerU Agent API
+MINERU_AGENT_BASE_URL=https://mineru.net/api/v1/agent
+
+# RAG Service
+RAG_SERVICE_URL=http://localhost:8000
+RAG_SERVICE_API_KEY=your_rag_api_key
+
+# Translation
+TRANSLATION_PROVIDER=openai
+TRANSLATION_API_KEY=your_translation_key
+```
+
+### Zotero Plugin Configuration
+
+The plugin stores configuration in Zotero's preferences system:
+
+- **API Keys**: MinerU Standard API token
+- **Vault Paths**: Local export directory
+- **Workflow Options**: Auto-translate, auto-index to RAG
+- **UI Preferences**: Panel layout, button placement
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass: `npm test`
+6. Commit your changes: `git commit -m 'Add amazing feature'`
+7. Push to the branch: `git push origin feature/amazing-feature`
+8. Open a Pull Request
+
+### Code Style
+
+- TypeScript with strict type checking
+- Clear module boundaries
+- Dependency injection for testability
+- Comprehensive error handling
+- Unit tests for all core functionality
 
 ## Roadmap
 
-1. Add a real Zotero runtime command/menu entry that starts the MinerU workflow from a selected PDF attachment.
-2. Bind the text-location provider to the live Zotero Reader runtime so page text runs and rectangles come from the active PDF.
-3. Add a real translation provider implementation and settings for credentials/model selection.
-4. Persist normalized documents and translation annotation metadata beside the source PDF or in the configured vault.
-5. Expand vault export to `paper.md`, `full.md`, `document.json`, `metadata.json`, per-block files, assets, and AI outputs.
-6. Add the minimal Zotero panel for Outline, Cards, Visuals, and Export views.
+### Completed ✅
+- MinerU Standard API integration
+- MinerU Agent API integration
+- Zotero Reader toolbar button
+- Attachment management system
+- Enhanced chunk conversion
+- RAG service integration
+- Translation framework
+- Basic vault export
 
-## Canonical Planning Docs
+### In Progress 🚧
+- Live Zotero Reader text anchoring
+- Real translation provider implementations
+- Settings UI for API keys and preferences
+- Advanced vault export with per-block files
 
-- Master plan: `docs/plans/2026-04-23-master-implementation-plan.md`
-- Initial scaffold plan: `docs/plans/2026-04-23-zotero-structured-literature-workspace.md`
+### Planned 📋
+- Zotero panel with Outline/Cards/Visuals/Export views
+- Cross-paper knowledge graph
+- AI-powered literature synthesis
+- Obsidian bidirectional sync
+- Semantic search across papers
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- [Zotero](https://www.zotero.org/) - Reference management software
+- [MinerU](https://mineru.net/) - PDF parsing engine
+- [TypeScript](https://www.typescriptlang.org/) - Type-safe JavaScript
+- [Vitest](https://vitest.dev/) - Testing framework
+
+## Support
+
+- **Documentation**: [docs/](docs/)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/zotero-mineru-structured-literature-workspace/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/zotero-mineru-structured-literature-workspace/discussions)
+
+---
+
+**Note**: This is an active research project. APIs and internal structures may change as we refine the system for production use.
