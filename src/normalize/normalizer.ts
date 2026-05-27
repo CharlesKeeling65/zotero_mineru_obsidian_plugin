@@ -1,19 +1,23 @@
-import type { Asset, Block, Document, Relation } from "../model/index.js";
+import type { Asset, Block, Chunk, Document, Relation } from "../model/index.js";
 import { DOCUMENT_SCHEMA_VERSION } from "../model/index.js";
 import type { RawMineruBlock, RawMineruDocument } from "../types/mineru.js";
+import { convertBlocksToChunks, type ChunkConfig, DEFAULT_CHUNK_CONFIG } from "./chunk-converter.js";
 
 /**
  * The normalized document bundle used by UI/export/AI layers.
  *
  * 中文：这是 MinerU 原始输出和 Zotero UI 之间的“内部标准格式”。
  * 后续界面、导出、AI 不应直接读 MinerU Markdown，而应读这里的 normalized entities。
+ * 新增 chunks 字段用于支持 RAG 检索系统。
  *
  * English: this is the internal contract between raw MinerU output and UI/export/AI.
  * Downstream layers should consume these normalized entities instead of raw Markdown.
+ * The new chunks field supports RAG retrieval system.
  */
 export interface NormalizedDocument {
   document: Document;
   blocks: Block[];
+  chunks: Chunk[];
   assets: Asset[];
   relations: Relation[];
 }
@@ -167,21 +171,27 @@ function makeRelations(documentId: string, blocks: Block[]): Relation[] {
  * - 给每个 raw block 生成稳定 `blockId`；
  * - 保留 `coreSection`、sectionPath、pageRange、order；
  * - 构建 sectionTree 和 block relation；
- * - 生成 Document 统计信息。
+ * - 生成 Document 统计信息；
+ * - 生成 Chunk 用于 RAG 检索。
  *
  * 参数：
  * - `raw`：MinerU provider 或 Markdown fallback 产生的数据。
  * - `parseBackend`：记录来源，例如 `agent`、`standard`、`local`。
+ * - `chunkConfig`：Chunk 生成配置，可选。
+ * - `embeddingModel`：嵌入模型名称，可选。
  *
  * English workflow:
  * - assign stable block IDs;
  * - preserve coreSection/sectionPath/pageRange/order;
  * - build section tree and relations;
- * - return a schema-versioned document bundle.
+ * - generate Document statistics;
+ * - generate Chunks for RAG retrieval.
  */
 export function normalizeMineruDocument(
   raw: RawMineruDocument,
-  parseBackend = "agent"
+  parseBackend = "agent",
+  chunkConfig?: ChunkConfig,
+  embeddingModel?: string
 ): NormalizedDocument {
   const blocks: Block[] = raw.blocks.map((block) => ({
     blockId: makeStableBlockId(raw.docId, block),
@@ -210,6 +220,15 @@ export function normalizeMineruDocument(
 
   const relations = makeRelations(raw.docId, blocks);
   const sectionTree = makeSectionTree(blocks);
+  
+  // 生成 Chunks 用于 RAG 检索
+  const chunks = convertBlocksToChunks(
+    blocks,
+    raw.zoteroItemKey,
+    raw.docId,
+    chunkConfig || DEFAULT_CHUNK_CONFIG,
+    embeddingModel
+  );
 
   return {
     document: {
@@ -229,12 +248,14 @@ export function normalizeMineruDocument(
       sectionTree,
       stats: {
         blockCount: blocks.length,
+        chunkCount: chunks.length,
         assetCount: 0,
         relationCount: relations.length
       },
       status: "parsed"
     },
     blocks,
+    chunks,
     assets: [],
     relations
   };
