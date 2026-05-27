@@ -15,6 +15,7 @@ import {
   type ZoteroTranslationAnnotationPayload
 } from "./annotations.js";
 import { resolvePdfSelection, type ResolvePdfSelectionInput } from "./selection.js";
+import type { RagIntegration } from "../rag/rag-integration.js";
 
 /**
  * End-to-end input for the Zotero -> MinerU -> normalized document workflow.
@@ -22,11 +23,13 @@ import { resolvePdfSelection, type ResolvePdfSelectionInput } from "./selection.
  * 中文：这是插件核心工作流的“依赖注入”入口。调用者传入 Zotero 选中的条目、
  * MinerU provider，以及可选的翻译/定位/注释 writer。这样主流程不直接绑定全局
  * Zotero 对象，也不直接绑定某个翻译服务，便于单元测试和后续替换实现。
+ * 新增 RAG 集成选项，支持自动索引到 RAG 服务。
  *
  * English: This is the dependency-injection boundary for the core workflow.
  * The caller provides the selected Zotero item, MinerU provider, and optional
  * translation/location/annotation services. The workflow therefore stays
  * independent from global Zotero objects and specific translation vendors.
+ * New RAG integration option supports automatic indexing to RAG service.
  */
 export interface ParseSelectedPdfWithMineruInput extends ResolvePdfSelectionInput {
   /** 中文：MinerU API 适配器；English: MinerU API adapter implementation. */
@@ -39,6 +42,8 @@ export interface ParseSelectedPdfWithMineruInput extends ResolvePdfSelectionInpu
   textLocationProvider?: ZoteroReaderTextLocationProvider;
   /** 中文：可选 Zotero 注释写入器；用于创建灰色翻译卡片。English: optional annotation writer. */
   annotationWriter?: TranslationAnnotationWriter;
+  /** 中文：可选 RAG 集成；用于自动索引到 RAG 服务。English: optional RAG integration for automatic indexing. */
+  ragIntegration?: RagIntegration;
 }
 
 /**
@@ -46,10 +51,11 @@ export interface ParseSelectedPdfWithMineruInput extends ResolvePdfSelectionInpu
  *
  * 中文：`normalized` 是插件后续 UI/export/AI 都应该消费的内部模型；
  * `outputDir` 是 PDF 所在父目录，也就是 MinerU markdown/raw 输出位置。
+ * 新增 `ragIntegration` 字段，包含 RAG 集成结果。
  *
  * English: `normalized` is the internal model consumed by later UI/export/AI
  * layers. `outputDir` is the selected PDF's parent folder where raw outputs
- * are persisted.
+ * are persisted. New `ragIntegration` field contains RAG integration result.
  */
 export interface ParseSelectedPdfWithMineruOutput {
   normalized: NormalizedDocument;
@@ -57,6 +63,12 @@ export interface ParseSelectedPdfWithMineruOutput {
   translationAnnotations?: {
     annotations: ZoteroTranslationAnnotationPayload[];
     createdCount: number;
+  };
+  ragIntegration?: {
+    status: string;
+    message: string;
+    itemKey?: string;
+    chunkCount?: number;
   };
 }
 
@@ -175,15 +187,54 @@ export async function parseSelectedPdfWithMineru(
       annotations
     );
 
+    // 中文：如果配置了 RAG 集成，则索引文档到 RAG 服务。
+    // English: If RAG integration is configured, index document to RAG service.
+    let ragIntegrationResult;
+    if (input.ragIntegration) {
+      try {
+        ragIntegrationResult = await input.ragIntegration.indexDocument(
+          normalized,
+          pdfPath
+        );
+      } catch (error) {
+        console.error("RAG integration failed:", error);
+        ragIntegrationResult = {
+          status: "error",
+          message: "RAG integration failed",
+          error: (error as Error).message
+        };
+      }
+    }
+
     return {
       normalized,
       outputDir,
       translationAnnotations: {
         annotations,
         createdCount
-      }
+      },
+      ragIntegration: ragIntegrationResult
     };
   }
 
-  return { normalized, outputDir };
+  // 中文：如果没有翻译，但配置了 RAG 集成，则索引文档到 RAG 服务。
+  // English: If no translation but RAG integration is configured, index document to RAG service.
+  let ragIntegrationResult;
+  if (input.ragIntegration) {
+    try {
+      ragIntegrationResult = await input.ragIntegration.indexDocument(
+        normalized,
+        pdfPath
+      );
+    } catch (error) {
+      console.error("RAG integration failed:", error);
+      ragIntegrationResult = {
+        status: "error",
+        message: "RAG integration failed",
+        error: (error as Error).message
+      };
+    }
+  }
+
+  return { normalized, outputDir, ragIntegration: ragIntegrationResult };
 }
