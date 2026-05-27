@@ -2,6 +2,7 @@ import type { Asset, Block, Chunk, Document, Relation } from "../model/index.js"
 import { DOCUMENT_SCHEMA_VERSION } from "../model/index.js";
 import type { RawMineruBlock, RawMineruDocument } from "../types/mineru.js";
 import { convertBlocksToChunks, type ChunkConfig, DEFAULT_CHUNK_CONFIG } from "./chunk-converter.js";
+import { EnhancedChunkConverter, createEnhancedChunkConverter, type EnhancedChunkConfig, type MineruAdvancedParseResult, DEFAULT_ENHANCED_CHUNK_CONFIG } from "./enhanced-chunk-converter.js";
 
 /**
  * The normalized document bundle used by UI/export/AI layers.
@@ -191,7 +192,8 @@ export function normalizeMineruDocument(
   raw: RawMineruDocument,
   parseBackend = "agent",
   chunkConfig?: ChunkConfig,
-  embeddingModel?: string
+  embeddingModel?: string,
+  advancedParseResult?: MineruAdvancedParseResult
 ): NormalizedDocument {
   const blocks: Block[] = raw.blocks.map((block) => ({
     blockId: makeStableBlockId(raw.docId, block),
@@ -222,13 +224,31 @@ export function normalizeMineruDocument(
   const sectionTree = makeSectionTree(blocks);
   
   // 生成 Chunks 用于 RAG 检索
-  const chunks = convertBlocksToChunks(
-    blocks,
-    raw.zoteroItemKey,
-    raw.docId,
-    chunkConfig || DEFAULT_CHUNK_CONFIG,
-    embeddingModel
-  );
+  // 如果有高级 API 结果，使用增强型 Chunk 转换器
+  let chunks: Chunk[];
+  if (advancedParseResult) {
+    const enhancedConverter = createEnhancedChunkConverter(
+      { ...DEFAULT_ENHANCED_CHUNK_CONFIG, ...chunkConfig },
+      advancedParseResult
+    );
+    chunks = blocks.flatMap(block => 
+      enhancedConverter.convertBlockToChunks({
+        block,
+        context: { sectionPath: block.sectionPath, pageRange: block.pageRange },
+        itemKey: raw.zoteroItemKey,
+        documentId: raw.docId,
+        embeddingModel
+      })
+    );
+  } else {
+    chunks = convertBlocksToChunks(
+      blocks,
+      raw.zoteroItemKey,
+      raw.docId,
+      chunkConfig || DEFAULT_CHUNK_CONFIG,
+      embeddingModel
+    );
+  }
 
   return {
     document: {

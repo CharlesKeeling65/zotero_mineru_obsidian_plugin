@@ -16,6 +16,7 @@ import {
 } from "./annotations.js";
 import { resolvePdfSelection, type ResolvePdfSelectionInput } from "./selection.js";
 import type { RagIntegration } from "../rag/rag-integration.js";
+import { AttachmentManager, createAttachmentManager, type AttachmentManagerConfig } from "./attachment-manager.js";
 
 /**
  * End-to-end input for the Zotero -> MinerU -> normalized document workflow.
@@ -44,6 +45,8 @@ export interface ParseSelectedPdfWithMineruInput extends ResolvePdfSelectionInpu
   annotationWriter?: TranslationAnnotationWriter;
   /** 中文：可选 RAG 集成；用于自动索引到 RAG 服务。English: optional RAG integration for automatic indexing. */
   ragIntegration?: RagIntegration;
+  /** 中文：可选附件管理器配置；用于将解析结果文件添加到 Zotero 条目。English: optional attachment manager config for adding parse result files to Zotero item. */
+  attachmentManagerConfig?: AttachmentManagerConfig;
 }
 
 /**
@@ -69,6 +72,13 @@ export interface ParseSelectedPdfWithMineruOutput {
     message: string;
     itemKey?: string;
     chunkCount?: number;
+  };
+  attachments?: {
+    addedCount: number;
+    stats: {
+      total: number;
+      byType: Record<string, number>;
+    };
   };
 }
 
@@ -236,5 +246,30 @@ export async function parseSelectedPdfWithMineru(
     }
   }
 
-  return { normalized, outputDir, ragIntegration: ragIntegrationResult };
+  // 中文：如果配置了附件管理器，则将解析结果文件添加到 Zotero 条目。
+  // English: If attachment manager is configured, add parse result files to Zotero item.
+  let attachmentResult;
+  if (input.attachmentManagerConfig) {
+    try {
+      const attachmentManager = createAttachmentManager(input.attachmentManagerConfig);
+      const addedCount = await attachmentManager.addMineruFilesToItem(
+        zoteroItemKey,
+        normalized.rawFiles,
+        pdfPath
+      );
+      const stats = await attachmentManager.getAttachmentStats(zoteroItemKey);
+      attachmentResult = {
+        addedCount,
+        stats
+      };
+    } catch (error) {
+      console.error("Attachment management failed:", error);
+      attachmentResult = {
+        addedCount: 0,
+        stats: { total: 0, byType: {} }
+      };
+    }
+  }
+
+  return { normalized, outputDir, ragIntegration: ragIntegrationResult, attachments: attachmentResult };
 }
