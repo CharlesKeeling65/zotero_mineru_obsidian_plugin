@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<!DOCTYPE window>
+<window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+        xmlns:html="http://www.w3.org/1999/xhtml"
+        xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+  <linkset>
+    <html:link rel="localization" href="slw-preferences.ftl"/>
+  </linkset>
+
+  <groupbox onload="Zotero.__slw__?.hooks.onPrefsLoad(document)">
+    <html:h2 data-l10n-id="pref-title"/>
+    
+    <!-- MinerU Backend Configuration -->
+    <hbox align="center">
+      <label data-l10n-id="pref-backend-label" control="backend"/>
+      <menulist id="slw-backend" preference="extensions.zotero.slw.mineruBackend">
+        <menupopup>
+          <menuitem label="Agent API (Free)" value="agent"/>
+          <menuitem label="Standard API (Requires Key)" value="standard"/>
+        </menupopup>
+      </menulist>
+    </hbox>
+
+    <!-- API Key (for Standard API) -->
+    <hbox align="center">
+      <label data-l10n-id="pref-apikey-label" control="apikey"/>
+      <html:input id="slw-apikey" type="password" 
+                  preference="extensions.zotero.slw.apiKey" 
+                  style="flex: 1;"/>
+    </hbox>
+
+    <!-- Enable Translation -->
+    <html:label>
+      <html:input id="slw-enable-translation" type="checkbox"
+                  preference="extensions.zotero.slw.enableTranslation"/>
+      <html:span data-l10n-id="pref-enable-translation"/>
+    </html:label>
+
+    <!-- Enable RAG Integration -->
+    <html:label>
+      <html:input id="slw-enable-rag" type="checkbox"
+                  preference="extensions.zotero.slw.enableRag"/>
+      <html:span data-l10n-id="pref-enable-rag"/>
+    </html:label>
+
+    <!-- Auto-add Attachments -->
+    <html:label>
+      <html:input id="slw-enable-attachments" type="checkbox"
+                  preference="extensions.zotero.slw.enableAttachmentManager"/>
+      <html:span data-l10n-id="pref-enable-attachments"/>
+    </html:label>
+
+    <!-- Export Path -->
+    <hbox align="center">
+      <label data-l10n-id="pref-exportpath-label" control="exportpath"/>
+      <html:input id="slw-exportpath" type="text"
+                  preference="extensions.zotero.slw.exportPath"
+                  style="flex: 1;"/>
+    </hbox>
+
+    <!-- Status Info -->
+    <vbox>
+      <html:label id="slw-status" data-l10n-id="pref-status"/>
+    </vbox>
+  </groupbox>
+</window>

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 2,
+  "name": "Structured Literature Workspace",
+  "version": "0.1.0",
+  "description": "Zotero plugin for MinerU-powered structured literature workspace",
+  "homepage_url": "https://github.com/yourusername/zotero-mineru-structured-literature-workspace",
+  "author": "Your Name",
+  "icons": {
+    "48": "content/icons/icon-48.png",
+    "96": "content/icons/icon-96.png"
+  },
+  "applications": {
+    "zotero": {
+      "id": "structured-literature-workspace@yourdomain.com",
+      "strict_min_version": "7.0",
+      "strict_max_version": "9.0.*"
+    }
+  }
+}

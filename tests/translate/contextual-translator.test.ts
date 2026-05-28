@@ -23,6 +23,7 @@ describe("translateDocumentTextBlocks", () => {
         sectionTree: [],
         stats: {
           blockCount: 2,
+          chunkCount: 0,
           assetCount: 0,
           relationCount: 1
         },

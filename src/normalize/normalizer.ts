@@ -231,15 +231,22 @@ export function normalizeMineruDocument(
       { ...DEFAULT_ENHANCED_CHUNK_CONFIG, ...chunkConfig },
       advancedParseResult
     );
-    chunks = blocks.flatMap(block => 
-      enhancedConverter.convertBlockToChunks({
+    chunks = blocks.flatMap((block, index) => {
+      const prevBlock = index > 0 ? blocks[index - 1] : undefined;
+      const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : undefined;
+      return enhancedConverter.convertBlockToChunks({
         block,
-        context: { sectionPath: block.sectionPath, pageRange: block.pageRange },
+        context: {
+          beforeText: prevBlock?.content.text ?? null,
+          afterText: nextBlock?.content.text ?? null,
+          section: block.sectionPath[0] ?? "",
+          subsection: block.sectionPath[1] ?? null,
+        },
         itemKey: raw.zoteroItemKey,
         documentId: raw.docId,
         embeddingModel
-      })
-    );
+      });
+    });
   } else {
     chunks = convertBlocksToChunks(
       blocks,

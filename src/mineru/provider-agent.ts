@@ -132,7 +132,7 @@ class FetchMineruAgentTransport implements MineruAgentTransport {
   public async putBinary(url: string, body: Uint8Array): Promise<void> {
     const response = await fetch(url, {
       method: "PUT",
-      body
+      body: body as any
     });
     if (!response.ok) {
       throw this.error(`upload PDF to MinerU failed with HTTP ${response.status}`);

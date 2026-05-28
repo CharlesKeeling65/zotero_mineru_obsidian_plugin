@@ -143,11 +143,10 @@ export function createParseInputFromReader(
   // 中文：创建一个模拟的 Zotero 选中项
   // English: Create a mock Zotero selected item
   const selectedItem = {
-    id: 0, // 实际 ID 需要从 Zotero 获取
     key: zoteroItemKey,
-    title: title,
-    itemType: "attachment",
-    attachmentPath: pdfPath
+    kind: "attachment" as const,
+    contentType: "application/pdf",
+    path: pdfPath
   };
 
   return {

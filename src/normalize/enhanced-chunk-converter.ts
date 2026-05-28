@@ -11,7 +11,7 @@
  * text chunking strategies.
  */
 
-import type { Block } from "../model/block.js";
+import type { BlockType } from "../model/block.js";
 import type { 
   Chunk, 
   CreateChunkInput, 
@@ -26,6 +26,9 @@ import {
   createTextHash,
   DEFAULT_CHUNK_CONFIG 
 } from "../model/chunk.js";
+
+/** Block subset type from CreateChunkInput for internal method signatures. */
+type BlockSubset = CreateChunkInput["block"];
 
 /**
  * MinerU 高级解析结果接口。
@@ -319,23 +322,31 @@ export class EnhancedChunkConverter {
       text: text.trim(),
       contentMarkdown: block.content.markdown || null,
       context: {
+        before: context.beforeText ?? null,
+        after: context.afterText ?? null,
+        section: context.section ?? "",
+        subsection: context.subsection ?? null,
         sectionPath: block.sectionPath,
-        pageRange: block.pageRange,
-        surroundingChunks: []
       },
       metadata: {
         blockType: block.type,
+        subtype: block.subtype ?? null,
+        pageStart: block.pageRange.start,
+        pageEnd: block.pageRange.end,
         order: block.order,
         tokenCount: estimateTokenCount(text),
-        language: this.detectLanguage(text),
-        createdAt: new Date().toISOString()
+        textHash: createTextHash(text),
+        createdAt: new Date().toISOString(),
+        embeddingModel: embeddingModel ?? null,
+        embedding: null,
       },
       retrieval: {
-        embeddingModel: embeddingModel || null,
-        embeddingVector: null,
-        embeddingGeneratedAt: null,
-        lastRetrievedAt: null,
-        retrievalCount: 0
+        score: 0,
+        bm25Score: null,
+        vectorScore: null,
+        rerankScore: null,
+        retrievalSource: "bm25",
+        whyRelevant: null,
       }
     };
 
@@ -351,7 +362,7 @@ export class EnhancedChunkConverter {
    * @param block Block 对象 / Block object
    * @returns 段落边界信息或 null / Paragraph boundary information or null
    */
-  private findParagraphBoundary(block: Block): {
+  private findParagraphBoundary(block: BlockSubset): {
     startOffset: number;
     endOffset: number;
     confidence: number;
@@ -376,7 +387,7 @@ export class EnhancedChunkConverter {
    * @param block Block 对象 / Block object
    * @returns 标题层级信息或 null / Heading hierarchy information or null
    */
-  private findHeadingInfo(block: Block): {
+  private findHeadingInfo(block: BlockSubset): {
     level: number;
     text: string;
     startOffset: number;
@@ -401,7 +412,7 @@ export class EnhancedChunkConverter {
    * @param block Block 对象 / Block object
    * @returns 表格位置信息或 null / Table position information or null
    */
-  private findTablePosition(block: Block): {
+  private findTablePosition(block: BlockSubset): {
     startOffset: number;
     endOffset: number;
     rows: number;
@@ -427,7 +438,7 @@ export class EnhancedChunkConverter {
    * @param block Block 对象 / Block object
    * @returns 公式位置信息或 null / Formula position information or null
    */
-  private findFormulaPosition(block: Block): {
+  private findFormulaPosition(block: BlockSubset): {
     startOffset: number;
     endOffset: number;
     type: "inline" | "block";
@@ -452,7 +463,7 @@ export class EnhancedChunkConverter {
    * @param block Block 对象 / Block object
    * @returns 图片位置信息或 null / Image position information or null
    */
-  private findImagePosition(block: Block): {
+  private findImagePosition(block: BlockSubset): {
     startOffset: number;
     endOffset: number;
     caption?: string;
@@ -512,24 +523,31 @@ export class EnhancedChunkConverter {
       text: chunkText,
       contentMarkdown: block.content.markdown || null,
       context: {
+        before: context.beforeText ?? null,
+        after: context.afterText ?? null,
+        section: context.section ?? "",
+        subsection: context.subsection ?? null,
         sectionPath: block.sectionPath,
-        pageRange: block.pageRange,
-        surroundingChunks: []
       },
       metadata: {
         blockType: block.type,
+        subtype: block.subtype ?? null,
+        pageStart: block.pageRange.start,
+        pageEnd: block.pageRange.end,
         order: block.order,
         tokenCount: estimateTokenCount(chunkText),
-        language: this.detectLanguage(chunkText),
+        textHash: createTextHash(chunkText),
         createdAt: new Date().toISOString(),
-        paragraphConfidence: paragraphBoundary.confidence
+        embeddingModel: embeddingModel ?? null,
+        embedding: null,
       },
       retrieval: {
-        embeddingModel: embeddingModel || null,
-        embeddingVector: null,
-        embeddingGeneratedAt: null,
-        lastRetrievedAt: null,
-        retrievalCount: 0
+        score: paragraphBoundary.confidence,
+        bm25Score: null,
+        vectorScore: null,
+        rerankScore: null,
+        retrievalSource: "bm25",
+        whyRelevant: null,
       }
     };
 
@@ -579,24 +597,31 @@ export class EnhancedChunkConverter {
       text: chunkText,
       contentMarkdown: block.content.markdown || null,
       context: {
+        before: context.beforeText ?? null,
+        after: context.afterText ?? null,
+        section: headingInfo.text,
+        subsection: null,
         sectionPath: [...block.sectionPath, headingInfo.text],
-        pageRange: block.pageRange,
-        surroundingChunks: []
       },
       metadata: {
         blockType: block.type,
+        subtype: block.subtype ?? null,
+        pageStart: block.pageRange.start,
+        pageEnd: block.pageRange.end,
         order: block.order,
         tokenCount: estimateTokenCount(chunkText),
-        language: this.detectLanguage(chunkText),
+        textHash: createTextHash(chunkText),
         createdAt: new Date().toISOString(),
-        headingLevel: headingInfo.level
+        embeddingModel: embeddingModel ?? null,
+        embedding: null,
       },
       retrieval: {
-        embeddingModel: embeddingModel || null,
-        embeddingVector: null,
-        embeddingGeneratedAt: null,
-        lastRetrievedAt: null,
-        retrievalCount: 0
+        score: 0,
+        bm25Score: null,
+        vectorScore: null,
+        rerankScore: null,
+        retrievalSource: "bm25",
+        whyRelevant: null,
       }
     };
 
@@ -648,25 +673,31 @@ export class EnhancedChunkConverter {
       text: chunkText,
       contentMarkdown: block.content.markdown || null,
       context: {
+        before: context.beforeText ?? null,
+        after: context.afterText ?? null,
+        section: context.section ?? "",
+        subsection: context.subsection ?? null,
         sectionPath: block.sectionPath,
-        pageRange: block.pageRange,
-        surroundingChunks: []
       },
       metadata: {
         blockType: block.type,
+        subtype: block.subtype ?? null,
+        pageStart: block.pageRange.start,
+        pageEnd: block.pageRange.end,
         order: block.order,
         tokenCount: estimateTokenCount(chunkText),
-        language: this.detectLanguage(chunkText),
+        textHash: createTextHash(chunkText),
         createdAt: new Date().toISOString(),
-        tableRows: tablePosition.rows,
-        tableColumns: tablePosition.columns
+        embeddingModel: embeddingModel ?? null,
+        embedding: null,
       },
       retrieval: {
-        embeddingModel: embeddingModel || null,
-        embeddingVector: null,
-        embeddingGeneratedAt: null,
-        lastRetrievedAt: null,
-        retrievalCount: 0
+        score: 0,
+        bm25Score: null,
+        vectorScore: null,
+        rerankScore: null,
+        retrievalSource: "bm25",
+        whyRelevant: null,
       }
     };
 
@@ -717,24 +748,31 @@ export class EnhancedChunkConverter {
       text: chunkText,
       contentMarkdown: block.content.markdown || null,
       context: {
+        before: context.beforeText ?? null,
+        after: context.afterText ?? null,
+        section: context.section ?? "",
+        subsection: context.subsection ?? null,
         sectionPath: block.sectionPath,
-        pageRange: block.pageRange,
-        surroundingChunks: []
       },
       metadata: {
         blockType: block.type,
+        subtype: block.subtype ?? null,
+        pageStart: block.pageRange.start,
+        pageEnd: block.pageRange.end,
         order: block.order,
         tokenCount: estimateTokenCount(chunkText),
-        language: this.detectLanguage(chunkText),
+        textHash: createTextHash(chunkText),
         createdAt: new Date().toISOString(),
-        formulaType: formulaPosition.type
+        embeddingModel: embeddingModel ?? null,
+        embedding: null,
       },
       retrieval: {
-        embeddingModel: embeddingModel || null,
-        embeddingVector: null,
-        embeddingGeneratedAt: null,
-        lastRetrievedAt: null,
-        retrievalCount: 0
+        score: 0,
+        bm25Score: null,
+        vectorScore: null,
+        rerankScore: null,
+        retrievalSource: "bm25",
+        whyRelevant: null,
       }
     };
 
@@ -785,53 +823,37 @@ export class EnhancedChunkConverter {
       text: chunkText,
       contentMarkdown: block.content.markdown || null,
       context: {
+        before: context.beforeText ?? null,
+        after: context.afterText ?? null,
+        section: context.section ?? "",
+        subsection: context.subsection ?? null,
         sectionPath: block.sectionPath,
-        pageRange: block.pageRange,
-        surroundingChunks: []
       },
       metadata: {
         blockType: block.type,
+        subtype: block.subtype ?? null,
+        pageStart: block.pageRange.start,
+        pageEnd: block.pageRange.end,
         order: block.order,
         tokenCount: estimateTokenCount(chunkText),
-        language: this.detectLanguage(chunkText),
+        textHash: createTextHash(chunkText),
         createdAt: new Date().toISOString(),
-        imageCaption: imagePosition.caption
+        embeddingModel: embeddingModel ?? null,
+        embedding: null,
       },
       retrieval: {
-        embeddingModel: embeddingModel || null,
-        embeddingVector: null,
-        embeddingGeneratedAt: null,
-        lastRetrievedAt: null,
-        retrievalCount: 0
+        score: 0,
+        bm25Score: null,
+        vectorScore: null,
+        rerankScore: null,
+        retrievalSource: "bm25",
+        whyRelevant: null,
       }
     };
 
     return [chunk];
   }
 
-  /**
-   * 检测文本语言。
-   *
-   * 中文：检测文本的主要语言。
-   * English: Detect the main language of the text.
-   *
-   * @param text 文本 / Text
-   * @returns 语言代码 / Language code
-   */
-  private detectLanguage(text: string): string {
-    // 中文：简单语言检测，实际实现可能需要更复杂的逻辑
-    // English: Simple language detection, actual implementation may need more complex logic
-    const chineseChars = text.match(/[\u4e00-\u9fff]/g);
-    const englishChars = text.match(/[a-zA-Z]/g);
-    
-    if (chineseChars && chineseChars.length > (englishChars?.length || 0)) {
-      return "zh";
-    } else if (englishChars && englishChars.length > 0) {
-      return "en";
-    } else {
-      return "unknown";
-    }
-  }
 }
 
 /**

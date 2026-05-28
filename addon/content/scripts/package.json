@@ -1,0 +1,30 @@
+{
+    "name": "zotero-mineru-structured-literature-workspace",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Zotero 8/9 plugin scaffold for a MinerU-backed structured literature workspace.",
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json && npm run bundle",
+        "bundle": "esbuild addon/content/scripts/index.js --bundle --outfile=addon/content/scripts/slw.js --format=iife --global-name=ZoteroSLW --platform=browser --target=es2022",
+        "check": "tsc --noEmit",
+        "inspect:markdown-blocks": "node scripts/inspect_markdown_blocks.mjs",
+        "test": "node ./node_modules/vitest/vitest.mjs run",
+        "package": "npm run build && zip -r dist/structured-literature-workspace.xpi manifest.json bootstrap.js addon/ -x '*.map'",
+        "build:all": "npm run build && npm run package",
+        "clean": "rm -rf dist/*.xpi addon/content/scripts/*.js addon/content/scripts/*.map",
+        "rebuild": "npm run clean && npm run build:all"
+    },
+    "dependencies": {
+        "zotero-plugin-toolkit": "^5.1.2"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "esbuild": "^0.25.0",
+        "typescript": "^5.8.3",
+        "vitest": "^3.2.4"
+    }
+}

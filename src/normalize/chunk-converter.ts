@@ -14,6 +14,10 @@ import {
   DEFAULT_CHUNK_CONFIG 
 } from "../model/chunk.js";
 
+// Re-export types and constants for external consumers
+export type { ChunkConfig } from "../model/chunk.js";
+export { DEFAULT_CHUNK_CONFIG } from "../model/chunk.js";
+
 /**
  * Convert a block to one or more chunks based on configuration.
  * 

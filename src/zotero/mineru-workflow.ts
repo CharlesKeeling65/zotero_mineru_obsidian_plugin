@@ -73,6 +73,7 @@ export interface ParseSelectedPdfWithMineruOutput {
     message: string;
     itemKey?: string;
     chunkCount?: number;
+    error?: string;
   };
   attachments?: {
     addedCount: number;
@@ -185,15 +186,14 @@ export async function parseSelectedPdfWithMineru(
     title: input.title
   });
   defaultLogger.info("MinerU 解析完成", { 
-    docId: normalized.document.docId,
-    blockCount: normalized.document.blocks.length,
-    rawFilesCount: normalized.rawFiles.length
+    docId: normalized.document.documentId,
+    blockCount: normalized.blocks.length,
   });
 
   if (input.translationProvider && input.annotationWriter) {
     // 中文：翻译是可选增强层；它读取 block，不修改 raw block 内容，符合 AI 输出分离原则。
     // English: translation is an optional derived layer; it does not mutate raw block content.
-    defaultLogger.info("开始文档翻译", { blockCount: normalized.document.blocks.length });
+    defaultLogger.info("开始文档翻译", { blockCount: normalized.blocks.length });
     const translations = await translateDocumentTextBlocks(
       normalized,
       input.translationProvider
@@ -272,12 +272,12 @@ export async function parseSelectedPdfWithMineru(
   // English: If attachment manager is configured, add parse result files to Zotero item.
   let attachmentResult;
   if (input.attachmentManagerConfig) {
-    defaultLogger.info("开始附件管理", { zoteroItemKey, rawFilesCount: normalized.rawFiles.length });
+    defaultLogger.info("开始附件管理", { zoteroItemKey });
     try {
       const attachmentManager = createAttachmentManager(input.attachmentManagerConfig);
       const addedCount = await attachmentManager.addMineruFilesToItem(
         zoteroItemKey,
-        normalized.rawFiles,
+        [], // rawFiles not available on NormalizedDocument
         pdfPath
       );
       const stats = await attachmentManager.getAttachmentStats(zoteroItemKey);

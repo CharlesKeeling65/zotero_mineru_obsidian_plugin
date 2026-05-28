@@ -4,17 +4,33 @@
   "private": true,
   "type": "module",
   "description": "Zotero 8/9 plugin scaffold for a MinerU-backed structured literature workspace.",
+  "config": {
+    "addonName": "Structured Literature Workspace",
+    "addonID": "structured-literature-workspace@yourdomain.com",
+    "addonRef": "slw",
+    "addonInstance": "__slw__",
+    "prefsPrefix": "extensions.zotero.slw"
+  },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && npm run bundle",
+    "bundle": "esbuild addon/content/scripts/src/index.js --bundle --outfile=addon/content/scripts/slw.js --format=iife --global-name=ZoteroSLW --platform=browser --target=es2022 --external:node:*",
     "check": "tsc --noEmit",
     "inspect:markdown-blocks": "node scripts/inspect_markdown_blocks.mjs",
-    "test": "node ./node_modules/vitest/vitest.mjs run"
+    "test": "node ./node_modules/vitest/vitest.mjs run",
+    "package": "npm run build && rm -f dist/structured-literature-workspace.xpi && cd dist && zip -r structured-literature-workspace.xpi ../addon/",
+    "build:all": "npm run build && npm run package",
+    "clean": "rm -rf dist/*.xpi addon/content/scripts/*.js addon/content/scripts/*.map",
+    "rebuild": "npm run clean && npm run build:all"
+  },
+  "dependencies": {
+    "zotero-plugin-toolkit": "^5.1.2"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }
